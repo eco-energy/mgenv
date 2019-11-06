@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Solar.Constants where
+module Env.Solar.Constants where
 
 import RIO
 import qualified RIO.Map as M
@@ -31,18 +31,18 @@ See also ftp://ftp.imcce.fr/pub/ephem/planets/vsop87/VSOP87D.ear
 
 type R = Double
 
-aberationCoeffs :: (RealFloat a) => Map String (a -> a)
+aberationCoeffs :: (Floating a) => Map String (a -> a)
 aberationCoeffs = M.fromList $ map mfn namedCoeffs
   where
-    mfn :: (RealFloat a) => (String, (a, a, a, a)) -> (String, (a -> a))
+    mfn :: (Floating a) => (String, (a, a, a, a)) -> (String, (a -> a))
     mfn tup = (name, toPolynomial cofs)
       where
         (name, cofs) = tup
-    toPolynomial :: (RealFloat a) => (a, a, a, a) -> (a -> a)
+    toPolynomial :: (Floating a) => (a, a, a, a) -> (a -> a)
     toPolynomial coeffs = (\x -> a + b * x + c * x**2 + x**3 /d)
       where
         (a, b, c, d) = coeffs
-    namedCoeffs :: (RealFloat a) => [(String, (a, a, a, a))]
+    namedCoeffs :: (Floating a) => [(String, (a, a, a, a))]
     namedCoeffs = [ ("ArgumentOfLatitudeOfMoon", (93.27191, 483202.017538, -0.0036825, 327270.0)),
                     ("LongitudeOfAscendingNode", (125.04452, -1934.136261, 0.0020708, 450000.0)),
                     ("MeanElongationOfMoon", (297.85036, 445267.111480, -0.0019142, 189474.0)),
@@ -81,7 +81,7 @@ earthAtmosphereMolarMass :: R
 earthAtmosphereMolarMass = 0.0289644 -- kg/mol
 
 
-aberrationSinTerms :: (RealFloat a) => [(a, a, a, a, a)]
+aberrationSinTerms :: (Floating a) => [(a, a, a, a, a)]
 aberrationSinTerms = [
         (0,0,0,0,1),
         (-2,0,0,2,2),
@@ -148,7 +148,7 @@ aberrationSinTerms = [
         (2,-1,0,2,2)
         ]
 
-nutationCoefficients :: (RealFloat a) => [(a, a, a, a)]
+nutationCoefficients :: (Floating a) => [(a, a, a, a)]
 nutationCoefficients = [
         (-171996,-174.2,92025,8.9),
         (-13187,-1.6,5736,-3.1),
@@ -362,7 +362,7 @@ heliocentricLongitudeCoeffs = [
     ]
 
 
-heliocentricLatitudeCoeffs :: (RealFloat a) => [[(a, a, a)]]
+heliocentricLatitudeCoeffs :: (Floating a) => [[(a, a, a)]]
 heliocentricLatitudeCoeffs = [
         [  -- B0
             (280.0,3.199,84334.662),
@@ -378,7 +378,7 @@ heliocentricLatitudeCoeffs = [
     ]
 
 
-sunEarthDistanceCoeffs :: (RealFloat a) => [[(a, a, a)]]
+sunEarthDistanceCoeffs :: (Floating a) => [[(a, a, a)]]
 sunEarthDistanceCoeffs = [
         [  -- R0
             (100013989.0,0,0),
