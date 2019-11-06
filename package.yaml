@@ -23,6 +23,9 @@ dependencies:
 - base >= 4.11 && < 10
 - rio >= 0.1.8.0
 - streamly
+- algebraic-graphs
+- time
+- astro
 
 ghc-options:
 - -Wall
