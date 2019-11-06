@@ -1,11 +1,14 @@
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+
 module Env.Storage where
 
 import Data.Tuple.Extra
 import Streamly.Prelude as S
 import Streamly
 import ConCat.Choice
-
-
+import Elm (Elm, elmStreetParseJson, elmStreetToJson)
 
 
 {--
@@ -36,22 +39,121 @@ Would be nice to have this incorporated in the charge and discharge functions.
 
 --}
 
+type R = Double
+
+type V = R
+type Ws = R
+type Amp = R
+type W = R
+type Sec = Integer
+type DelT = Int
+type Q = Amp S
+type SoC = R
+
+type Efficiency = (R->R)
+
+type ChargeEfficiency = CEfficiency
+type DischargeEfficiecny = DEfficiency
+type Eff = (ChargeEfficiency, DischargeEfficiency)
 
 {--
-There are three kinds of models useful for batteries:
-- Equivalent Circuit Models: Computationally Cheap but inaccurate
-- Electrochemical Models : Computationally Complex but accurate
-- Physics-based Dynamics: Computationally Palatable and accurate
 
-# Equivalent Circuit Models:
+Run an autoregressive representation of each battery parameter.
+Maintain a fold over all the batteries as the net grid energy G_e.
+Optimize for sum (netEnergy) - FearOfEOut * (all (each netEnergy n t > 0 forall n, t)) 
 
-Behavioural approximation to how a cell's voltage responds to different input-current stimuli
+--}
 
-## Open-Circuit Voltage
-This is the most fundamental observed behaviour of a cell: It delievers a voltage at the terminals.
-The simplest model for a cell is thus an ideal voltage source emitting a constant terminal voltage v(t).
-Open circuit here means that the cell is unloaded and in complete equilibrium.
 
+data BatteryObservation = Load
+                          { i_t :: Amp
+                          , v_t :: V
+                          , duration :: DelT }
+                        | Charge
+                          { i_t :: Amp
+                          , v_t :: V
+                          , duration :: DelT }
+                        deriving (Eq, Show, Generic)
+
+data BatteryState = BatteryState
+  { z_t :: Dist (Map Cells Q)
+  , e_t :: Dist WattHours
+  , cp_t :: Dist Watts
+  , dp_t :: Dist Watts
+  } deriving (Eq, Show, Generic)
+    deriving anyclass (Elm)
+
+
+
+data BatteryParameters = BatteryParameters
+  { coloumbicEff :: Eff
+  , del_t :: DelT
+  , totalChargeCapacity :: Q
+  , qMin :: Q  -- depth of discharge minimum SOC
+  , qMax :: Q  -- depth of discharge maximum SOC
+  , vNominal :: V
+  , vMin :: V
+  , vMax :: V
+  , delVDisAtI :: (Amp -> V)
+  , iDis :: Amp
+  , delVChgAtI :: (Amp -> V)
+  , iChg :: Amp
+  } deriving (Eq, Show, Generic)
+    deriving anyclass (Elm)
+
+
+stateNext :: BatteryParameters -> BatteryState -> BatteryObservation -> BatteryState
+stateNext BatteryParameters {..} BatteryState {..} BatteryObservation {..} =
+  BatteryState $ ztNext etNext ptNext
+  where
+    ztNext = z_t - (del_t / Q)  - (ce * i_t)
+      where
+        ce = if (i_t <= 0) then fst coloumbicEff else snd coloumbicEff
+    etNext = totalChargeCapacity * vNominal * (zt_next - (qMin / totalChargeCapacity))
+    ptNext = (Discharge dp, Charge cp)
+      where
+        dp = p vMin rDis
+        dc = p vMax rChg
+        p vRef r = vRef * ((ocv z_t - vRef) / r) 
+        ik = ((ocv ztNext) - vMin / rK)
+        rDis = delVDisAtI / iDis
+        rChg = delVChgAtI / iChg
+
+
+cyclesCompleted :: BatteryState -> (ChargeHours, DischargeHours)
+cyclesCompleted (BatteryState zk) = len zk
+
+
+data ChargeEvent = CCCV {}
+                 | CV {}
+                 deriving (Eq, Ord, Generic) deriving anyclass (Elm)
+
+data DischargeEvent = Scheduled | Unscheduled deriving (Eq, Ord, Generic)
+
+
+
+
+
+
+
+
+-- Instances for elm type generation
+instance ToJSON BatteryObservation where toJSON = elmStreetToJson
+instance FromJSON BatteryObservation where fromJOSN = elmStreetFromJSON
+
+instance ToJSON BatteryState where toJSON = elmStreetToJson
+instance FromJSON BatteryState where fromJOSN = elmStreetFromJSON
+
+instance ToJSON BatteryParameters where toJSON = elmStreetToJson
+instance FromJSON BatteryParameters where fromJOSN = elmStreetFromJSON
+
+instance ToJSON ChargeEvent where toJSON = elmStreetToJSON
+instance FromJSON ChargeEvent where fromJSON = elmStreetFromJSON
+
+
+
+
+{--
 ## State of Charge Dependence
 The voltage of a fully charged cell is higher than the voltage of a discharged cell when the cell is in unloaded equilibrium.
 The state of charge (z) is 100% when the cell is fully charged and 0% when it is fully discharged. 
@@ -78,85 +180,8 @@ t0 = k*del_t and t = (k+1)*del_t
 The revision to our OCV model as a result of this is that the
 ideal voltage source is replaced by a controlled voltage source having value equal ti OCV(z(t)). With temperature dependence:
 OCV(z(t), T(t))
---}
 
-type R = Double
-
-type V = R
-type Wh = R
-type Amp = R
-type W = R
-type Sec = Integer
-type DelT = Int
-type Q = R
-type SoC = R
-
-type Efficiency = (R->R)
-
-type ChargeEfficiency = CEfficiency
-type DischargeEfficiecny = DEfficiency
-type Eff = (ChargeEfficiency, DischargeEfficiency)
-
-{--
-
-Run an autoregressive representation of each battery parameter.
-Maintain a fold over all the batteries as the net grid energy G_e.
-Optimize for sum (netEnergy) - FearOfEOut * (all (each netEnergy n t > 0 forall n, t)) 
-
---}
-
-data BatteryObservation = BatteryObservation
-  { i_t :: Amp
-  , v_t :: V
-  , temp_t :: Temp
-} deriving (Eq, Show, Generic)
-
-data BatteryState = BatteryState
-  { z_t :: Dist (Map Cells Q)
-  , e_t :: Dist WattHours
-  , p_t :: Dist Watts
-  } deriving (Eq, Show, Generic)
-
-
-instance Monoid BatteryState where
-  BatteryState a (<>) BatteryState b = BatteryState
-                                       { z_k = zk_next
-                                       , i_k = i_k  } 
-
-instance RepresentableFunctor BatteryState
-
-
-data BatteryParameters = BatteryParameters
-  { n_k :: [Eff]
-  , del_t :: T
-  , totalChargeCapacity :: Q
-  } deriving (Eq, Show, Generic)
-
-
-data BatterySettings = BatterySettings
-  { qMin :: Q  -- depth of discharge minimum SOC
-  , qMax :: Q  -- depth of discharge maximum SOC
-  } deriving (Eq, Show, Generic)
-
-
-data ChargeType = CCCV | CV deriving (Eq, Ord, Generic)
-
-data DischargeType = Scheduled | Unscheduled deriving (Eq, Ord, Generic)
-
-
-cyclesCompleted :: BatteryState -> Int
-cyclesCompleted (BatteryState zk) = len zk
-
-totalCharge :: Q
-totalCharge = 10
-
-stateOfCharge :: BatteryParameters -> BatteryState -> SoC
-stateOfCharge BatteryParameters {..} BatteryState {..} = socAtT
-  where
-    socAtT = fold (\(s, i) -> s - (nk i) * c) $ zip z_k i_k $ (0, 0)
-    nk i
-      | (i <= 0) = (fst n_k)
-      | (i >= 0) = (snd n_k) 
+-}
 
 
 batterySoC :: BatteryParameters -> (BatteryState -> SoC)
@@ -252,6 +277,27 @@ instance Storage Battery where
   capacityAtCycle (LeadAcid b) cyc = undefined
   dodLimits b = both (voltageToEnergyStored b) $ dodLimitsV . state $ b
   updateCapacity b{BatteryState {state}} = undefined
+
+
+{--
+There are three kinds of models useful for batteries:
+- Equivalent Circuit Models: Computationally Cheap but inaccurate
+- Electrochemical Models : Computationally Complex but accurate
+- Physics-based Dynamics: Computationally Palatable and accurate
+
+# Equivalent Circuit Models:
+
+Behavioural approximation to how a cell's voltage responds to different input-current stimuli
+
+## Open-Circuit Voltage
+This is the most fundamental observed behaviour of a cell: It delievers a voltage at the terminals.
+The simplest model for a cell is thus an ideal voltage source emitting a constant terminal voltage v(t).
+Open circuit here means that the cell is unloaded and in complete equilibrium.
+
+
+--}
+
+
 
 
 {--
