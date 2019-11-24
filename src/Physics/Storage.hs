@@ -1,17 +1,14 @@
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DataKinds #-}
 module Physics.Storage where
 
 import Data.Tuple.Extra ()
-import Env.Time (systemDelT)
 import GHC.Generics hiding (R)
 import Physics.Units
-import Control.Monad.State
+import Control.Monad.Bayes.Class
+import Control.Monad (replicateM, liftM, liftM2)
 
 {--
 In terms of the environment design, what the RL controller should see
@@ -65,12 +62,11 @@ data BatteryState = BatteryState
   } deriving (Eq, Show, Generic)
 
 
-data BatteryParameters = BatteryParameters
+data BatterySpec = BatterySpec
   { coloumbicEff :: Eff
-  , del_t :: DelT
-  , totalChargeCapacity :: Q
-  , qMin :: Q  -- depth of discharge minimum SOC
-  , qMax :: Q  -- depth of discharge maximum SOC
+  , totalChargeCapacity :: AmpH
+  , qMin :: AmpH  -- depth of discharge minimum SOC
+  , qMax :: AmpH  -- depth of discharge maximum SOC
   , vNominal :: V
   , vMin :: V
   , vMax :: V
@@ -82,37 +78,58 @@ data BatteryParameters = BatteryParameters
 
 
 data Battery = Battery
-               { params :: BatteryParameters
+               { params :: BatterySpec
                , state :: BatteryState
                , obs :: BatteryObservation
-               }
-             deriving (Eq, Show, Generic)
+               } deriving (Eq, Show, Generic)
 
 
-instance Storage Battery where
-  chargePower Battery { state } =  cp_t state
-  dischargePower Battery { state } = dp_t state
-  energyStored Battery { state } = e_t state
+instance Storage BatteryState where
+  chargePower BatteryState { .. } =  cp_t
+  dischargePower BatteryState { .. } = dp_t
+  energyStored BatteryState { .. } = e_t
 
 
-defaultParameters :: BatteryParameters
-defaultParameters = BatteryParameters eff systemDelT totCap qMin qMax vNom vMin vMax ddisVAtI iDis dchgVAtI iChg
+defaultParameters :: BatterySpec
+defaultParameters = BatterySpec eff totCap qMin qMax vNom vMin vMax ddisVAtI iDis dchgVAtI iChg
   where
     eff = (0.85, 0.99) :: Eff
-    totCap = (ahToColoumb (120 :: AmpH)) :: Q
-    qMin = (ahToColoumb (120/2 :: AmpH)) :: Q
-    qMax = ahToColoumb (120*0.9 :: AmpH) :: Q
-    vNom = (12.3 :: V)
-    vMin = (11.3 :: V)
-    vMax = (14.3 :: V)
-    ddisVAtI = (0.1 :: V) -- 0.1 volts discharge per 1/2 Amp of output power over a time t
-    iDis = (1 / 2 :: Amp)
-    dchgVAtI = (0.1 :: V)
-    iChg = (1 / 2 :: Amp)
-                    
+    totCap = 120 :: AmpH
+    qMin = totCap * 0.5 :: AmpH
+    qMax = totCap * 0.9 :: AmpH
+    vNom = 12.3 :: V
+    vMin = 11.3 :: V
+    vMax = 14.3 :: V
+    ddisVAtI = 0.1 :: V -- 0.1 volts discharge per 1/2 Amp of output power over a time t
+    iDis = 0.5 :: Amp
+    dchgVAtI = 0.1 :: V
+    iChg = 0.5 :: Amp
 
+sampleBatterySpec :: MonadSample m => m BatterySpec
+sampleBatterySpec = do
+  eff <- do
+      c <- normal 0.8 0.2
+      d <- normal 0.9 0.2
+      return (c, d)
+  cap <- (uniformD [40, 50.. 400])
+  qMin <- liftM (*cap) (uniform 0.2 0.5)
+  qMax <- liftM (*cap) $ uniform 0.8 0.99
+  vNom <- normal 12 0.5
+  vMax <- liftM ((+) vNom . abs) $ normal 2.0 1.0
+  vMin <- liftM ((-) vNom . abs) $ normal 2.0 1.0
+  dischargeDeltaV <- uniform 0.1 0.5
+  dischargeRefCurr <- uniform 0.1 40
+  chargeDeltaV <- uniform 0.1 0.5
+  chargeRefCurr <- uniform 0.1 40
+  let
+    spec = BatterySpec eff cap qMin qMax vNom vMin vMax dischargeDeltaV dischargeRefCurr chargeDeltaV chargeRefCurr
+  return spec
+  
 ahToColoumb :: AmpH -> Q
 ahToColoumb ah = ah * 3600
+
+coloumbToAh :: Q -> AmpH
+coloumbToAh c = c / 3600
 
 defaultState :: BatteryState
 defaultState = BatteryState 0 0 0 0
@@ -123,23 +140,55 @@ defaultObs = BatteryObservation 0 0 0
 mkBattery :: Battery
 mkBattery = Battery defaultParameters defaultState defaultObs
 
-stateNext :: BatteryParameters -> BatteryState -> BatteryObservation -> BatteryState
-stateNext BatteryParameters {..} BatteryState {..} BatteryObservation {..} = BatteryState ztNext etNext dpNext cpNext
+batterySpec = BatterySpec
+
+toEff c d = (c, d) :: Eff
+
+batteryState :: SoC -> WattHours -> Watts -> Watts -> BatteryState
+batteryState = BatteryState
+
+stateNext :: BatterySpec -> BatteryState -> Amp -> DelT -> BatteryState
+stateNext BatterySpec {..} BatteryState {..} current del_t = batteryState ztNext etNext dpNext cpNext
   where
-    ztNext = z_t - (dt / totalChargeCapacity)  - (ce * i_t)
+    ztNext :: SoC
+    ztNext = z_t - (dt / (ahToColoumb totalChargeCapacity))  - (ce * current)
       where
-        ce = if (i_t <= 0) then fst coloumbicEff else snd coloumbicEff
-    etNext = totalChargeCapacity * vNominal * (ztNext - (qMin / totalChargeCapacity))
-    cpNext = p vMin rDis
-    dpNext = p vMax rChg
-    p vRef r = vRef * ik
-      where
-        ik = ((ocv z_t - vRef) / r)
-    rDis = delVDisAtI / iDis
-    rChg = delVChgAtI / iChg
-    ocv _ = vNominal         -- Horrible
+        ce = if (current <= 0) then fst coloumbicEff else snd coloumbicEff
+    etNext :: WattHours
+    etNext = storedEnergy totalChargeCapacity vNominal ztNext qMin
+    cpNext :: Watts
+    cpNext = power vMax $ chargeCurrentLimit ocV vMax rChg
+    dpNext :: Watts
+    dpNext = power vMin $ dischargeCurrentLimit ocV vMin rDis
+    rDis :: Ohm
+    rDis = internalResistance delVDisAtI iDis
+    rChg :: Ohm
+    rChg = internalResistance delVChgAtI iChg
+    ocV = vNominal
     dt = fromIntegral del_t
 
+-- should always be greater than 0
+storedEnergy :: AmpH -> V -> SoC -> AmpH -> WattHours
+storedEnergy qmax vNom soc qmin = (qmax * vNom) * (soc - (qmin / qmax))
+
+-- should always be greater than 0
+internalResistance :: Fractional a => a -> a -> a
+internalResistance deltaV refCurr = deltaV / refCurr
+
+-- Should always be less than 0
+chargeCurrentLimit :: V -> V -> Ohm -> Amp
+chargeCurrentLimit ocV vMax chargeResistance = (ocV - vMax) / chargeResistance  
+
+-- Should always be greater than 0
+dischargeCurrentLimit :: V -> V -> Ohm -> Amp
+dischargeCurrentLimit ocV vMin dischargeResistance = (ocV - vMin) / dischargeResistance
+
+-- horrible, get a better model
+ocvAtSoC :: BatterySpec -> SoC -> V
+ocvAtSoC BatterySpec {..} soc = vNominal
+
+power :: V -> Amp -> Watts
+power v i = v * i
 
 
 {--
