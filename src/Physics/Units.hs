@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 module Physics.Units
-  (R, Q, V, Amp,
+  (R, Q, V, Amp, Ohm,
    W, Watts,
    AmpH, WH, WattHours,
    WattsPerMeter, WattsPerMeterSq,
@@ -24,7 +24,7 @@ type R = Double
 type Q = R
 type V = R
 type Amp = R
-
+type Ohm = R
 
 type W = R
 type Watts = W
