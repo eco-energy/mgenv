@@ -4,31 +4,34 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ConstraintKinds #-}
-module Node where
+module HH where
 
-import Physics.Storage
-import Physics.Solar
-import Physics.Transmission
+import Physics.Storage (StorageSpec, BatteryState)
+import Physics.Generation (mkGen, GeneratorSpec)
+import Physics.Transmission (TransmissionState, outflow, inflow, TransmissionSpec)
+import Physics.Consumption (LoadSpec)
 import Physics.Units (R, Sec, Meters, GeoC, EuclideanC, ZonedTime, unZonedTime, Watts, Amp, V, DelT, WattsPerMeterSq)
-import Env.Time (systemDelT)
-import Control.Concurrent
---import Physics.Load
---import Physics.Algorithms
 
 import Algebra.Graph.AdjacencyIntMap.Algorithm
 import Algebra.Graph.AdjacencyIntMap
 import GHC.Generics (Generic)
 
 
-type NodeTime = Sec
+-- A household tracks three types of State:
+-- (Storage, Consumption, Transmission)
+-- This state results in a Reward at the end of an episode
 
-data Node = Node
+
+type Reward = R
+
+type HHState = State (Battery, TransmissionState, ConsumptionState)
+
+data HH = HH
   { location :: GeoC
   , gridLoc  :: EuclideanC
-  , time     :: ZonedTime
-  , storage  :: Battery
-  , generation :: [(MetersSq, ConvEff)]
-  , loads :: [Watts]
+  , storage  :: BatterySpec
+  , generator :: GeneratorSpec
+  , loads :: LoadSpec
   } deriving (Eq, Show, Generic)
 
 
