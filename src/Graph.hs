@@ -1,5 +1,0 @@
-module Graph where
-
-
-
-generateNodes :: 

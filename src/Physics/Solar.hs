@@ -1,4 +1,4 @@
-module Env.Solar where
+module Physics.Solar where
 
 import RIO.Time
 import Data.Astro.Time.JulianDate
@@ -9,8 +9,8 @@ import Data.Astro.Sun
 import Data.Astro.CelestialObject.RiseSet (RiseSetMB)
 import Data.Astro.Time.Conv
 
-location :: Double -> Double -> GeographicCoordinates
-location lat long = GeoC (DD lat) (DD long)
+import Physics.Units (WattsPerMeterSq)
+
 
 lct :: LocalCivilTime
 lct = lctFromYMDHMS (DH 1) 2019 10 11 3 21 0
@@ -26,16 +26,15 @@ setupDay loc day = sunRiseAndSet loc verticalShift lcd
     verticalShift = 0.833333
 
 
-directRadiation :: ZonedTime -> GeographicCoordinates -> Maybe Double
-directRadiation t loc
-  | not (isDaytime alt) = Just 0
-  | (isDaytime alt) = Just $ flux * exp (-1 * opticalDepth * airMassRatio)
-  | otherwise = Nothing
+directRadiation :: GeographicCoordinates -> ZonedTime -> WattsPerMeterSq
+directRadiation loc t
+  | (isDaytime alt) = flux * exp (-1 * opticalDepth * airMassRatio)
+  | otherwise = 0
   where
     isDaytime :: DecimalDegrees -> Bool
     isDaytime (DD a)
       | a > 0 = True
-      | a <= 0 = False
+      | otherwise = False
     flux = 1160 + (75 * sin (2 * pi / 365 * (fromIntegral dayOfYear - 275)))
     opticalDepth = 0.174 + (0.035 * sin (2 * pi / 365 * (fromIntegral dayOfYear - 100)))
     airMassRatio = 1 / sin (toRadians alt)

@@ -3,7 +3,135 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    subdir: inline
+    cabal-file:
+      size: 815
+      sha256: d5d57292bfce1359b27af708ad985b12b777a85fdd8b4fd2325e4d4fa30b0009
+    name: concat-inline
+    version: 0.1.0.0
+    git: https://github.com/conal/concat.git
+    pantry-tree:
+      size: 319
+      sha256: 54fc1efd925d33e67eddaf121419ebd59f15b775c84d8e381a58832f17680fda
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+  original:
+    subdir: inline
+    git: https://github.com/conal/concat.git
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+- completed:
+    subdir: known
+    cabal-file:
+      size: 745
+      sha256: 178fc68696d689967156e319fd086dfaaad0b0ef71414603e019b80228775aac
+    name: concat-known
+    version: 0.1.0.0
+    git: https://github.com/conal/concat.git
+    pantry-tree:
+      size: 168
+      sha256: 32bfd2141c47e73bb9f7caea8866a62490913cea7c48eced10dc77f547cec134
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+  original:
+    subdir: known
+    git: https://github.com/conal/concat.git
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+- completed:
+    subdir: satisfy
+    cabal-file:
+      size: 941
+      sha256: 756cb8966beb6970cf86b6b07814f0c2009000b4b0f90504c7ae7b10d8b70176
+    name: concat-satisfy
+    version: 0.1.0.0
+    git: https://github.com/conal/concat.git
+    pantry-tree:
+      size: 374
+      sha256: d346aa66a7ac18fc3290c3fde3498a3511b86147686f152e5d1a1c25d8bc74fa
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+  original:
+    subdir: satisfy
+    git: https://github.com/conal/concat.git
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+- completed:
+    subdir: classes
+    cabal-file:
+      size: 1941
+      sha256: ba8ef15660f3b4ce2d8b7bb9f69dea7ba1bf1596ee2956ab8739d43768ee35dd
+    name: concat-classes
+    version: 0.3.0.0
+    git: https://github.com/conal/concat.git
+    pantry-tree:
+      size: 1067
+      sha256: d820c85a5ec00c4a88b07d32b739cc6e3e8242550120b088b5d81c56822bcfed
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+  original:
+    subdir: classes
+    git: https://github.com/conal/concat.git
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+- completed:
+    subdir: plugin
+    cabal-file:
+      size: 1498
+      sha256: fea0807ab4d665399239f22f7e46ee33121db53be27b698afc9a31aac6c59e25
+    name: concat-plugin
+    version: 0.3.0.0
+    git: https://github.com/conal/concat.git
+    pantry-tree:
+      size: 460
+      sha256: b94e28a01445292bf0d04caf4345da7f63570082c20796dadf19e132e231c21c
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+  original:
+    subdir: plugin
+    git: https://github.com/conal/concat.git
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+- completed:
+    subdir: examples
+    cabal-file:
+      size: 8686
+      sha256: e10acfb864b2d2c7f618fb4d38dbfa45ac67e199c6cc8d8c6556cd3bf4f80231
+    name: concat-examples
+    version: 0.3.0.0
+    git: https://github.com/conal/concat.git
+    pantry-tree:
+      size: 9186
+      sha256: 10807fd30c1406e08ac12950ebb6a21bcbaac8381764b74dac9165468383623d
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+  original:
+    subdir: examples
+    git: https://github.com/conal/concat.git
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+- completed:
+    subdir: graphics
+    cabal-file:
+      size: 2620
+      sha256: e02fce6b5e428dfe9590d4ae51c7cfaa8165f528ec19baea384d8fce58b7bb0c
+    name: concat-graphics
+    version: 0.1.0.0
+    git: https://github.com/conal/concat.git
+    pantry-tree:
+      size: 641
+      sha256: 9eaf49ce2586bfea4927f415ab3361e562009e2289a5fc3f5c2ea8eb61b56e8b
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+  original:
+    subdir: graphics
+    git: https://github.com/conal/concat.git
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+- completed:
+    subdir: hardware
+    cabal-file:
+      size: 3232
+      sha256: a61725d5c442c4999193b1dfcca02087b195b1c482962edaaf2cf30c67ff8679
+    name: concat-hardware
+    version: 0.1.0.0
+    git: https://github.com/conal/concat.git
+    pantry-tree:
+      size: 500
+      sha256: 5a6cd83d166111497d9068e76f929665d2f2081142a86f81f817fa5e69f2c203
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+  original:
+    subdir: hardware
+    git: https://github.com/conal/concat.git
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
 snapshots:
 - completed:
     size: 524130

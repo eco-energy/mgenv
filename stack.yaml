@@ -34,10 +34,18 @@ packages:
 # These entries can reference officially published versions as well as
 # forks / in-progress versions pinned to a git hash. For example:
 #
-# extra-deps:
-# - acme-missiles-0.3
-# - git: https://github.com/commercialhaskell/stack.git
-#   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
+extra-deps:
+  - git: https://github.com/conal/concat.git
+    commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+    subdirs:
+      - inline
+      - known
+      - satisfy
+      - classes
+      - plugin
+      - examples
+      - graphics
+      - hardware
 #
 # extra-deps: []
 

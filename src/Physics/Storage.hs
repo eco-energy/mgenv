@@ -1,15 +1,17 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DataKinds #-}
+module Physics.Storage where
 
-module Env.Storage where
-
-import Data.Tuple.Extra
-import Streamly.Prelude as S
-import Streamly
-import ConCat.Choice
-import Elm (Elm, elmStreetParseJson, elmStreetToJson)
-
+import Data.Tuple.Extra ()
+import Env.Time (systemDelT)
+import GHC.Generics hiding (R)
+import Physics.Units
+import Control.Monad.State
 
 {--
 In terms of the environment design, what the RL controller should see
@@ -39,50 +41,28 @@ Would be nice to have this incorporated in the charge and discharge functions.
 
 --}
 
-type R = Double
+class Storage a where
+  chargePower :: a -> Watts
+  dischargePower :: a -> Watts
+  energyStored :: a -> WattHours
 
-type V = R
-type Ws = R
-type Amp = R
-type W = R
-type Sec = Integer
-type DelT = Int
-type Q = Amp S
-type SoC = R
 
-type Efficiency = (R->R)
-
-type ChargeEfficiency = CEfficiency
-type DischargeEfficiecny = DEfficiency
+type ChargeEfficiency = Efficiency
+type DischargeEfficiency = Efficiency
 type Eff = (ChargeEfficiency, DischargeEfficiency)
 
-{--
-
-Run an autoregressive representation of each battery parameter.
-Maintain a fold over all the batteries as the net grid energy G_e.
-Optimize for sum (netEnergy) - FearOfEOut * (all (each netEnergy n t > 0 forall n, t)) 
-
---}
-
-
-data BatteryObservation = Load
-                          { i_t :: Amp
-                          , v_t :: V
-                          , duration :: DelT }
-                        | Charge
+data BatteryObservation = BatteryObservation
                           { i_t :: Amp
                           , v_t :: V
                           , duration :: DelT }
                         deriving (Eq, Show, Generic)
 
 data BatteryState = BatteryState
-  { z_t :: Dist (Map Cells Q)
-  , e_t :: Dist WattHours
-  , cp_t :: Dist Watts
-  , dp_t :: Dist Watts
+  { z_t :: SoC
+  , e_t :: WattHours
+  , cp_t :: Watts
+  , dp_t :: Watts
   } deriving (Eq, Show, Generic)
-    deriving anyclass (Elm)
-
 
 
 data BatteryParameters = BatteryParameters
@@ -94,63 +74,107 @@ data BatteryParameters = BatteryParameters
   , vNominal :: V
   , vMin :: V
   , vMax :: V
-  , delVDisAtI :: (Amp -> V)
-  , iDis :: Amp
-  , delVChgAtI :: (Amp -> V)
-  , iChg :: Amp
+  , delVDisAtI :: V -- should be (Amp -> V) with iDis as the first parameter
+  , iDis :: Amp -- should be a parameter to delVDisAtI
+  , delVChgAtI :: V -- same as above, should be (Amp -> V)
+  , iChg :: Amp -- same as above
   } deriving (Eq, Show, Generic)
-    deriving anyclass (Elm)
 
+
+data Battery = Battery
+               { params :: BatteryParameters
+               , state :: BatteryState
+               , obs :: BatteryObservation
+               }
+             deriving (Eq, Show, Generic)
+
+
+instance Storage Battery where
+  chargePower Battery { state } =  cp_t state
+  dischargePower Battery { state } = dp_t state
+  energyStored Battery { state } = e_t state
+
+
+defaultParameters :: BatteryParameters
+defaultParameters = BatteryParameters eff systemDelT totCap qMin qMax vNom vMin vMax ddisVAtI iDis dchgVAtI iChg
+  where
+    eff = (0.85, 0.99) :: Eff
+    totCap = (ahToColoumb (120 :: AmpH)) :: Q
+    qMin = (ahToColoumb (120/2 :: AmpH)) :: Q
+    qMax = ahToColoumb (120*0.9 :: AmpH) :: Q
+    vNom = (12.3 :: V)
+    vMin = (11.3 :: V)
+    vMax = (14.3 :: V)
+    ddisVAtI = (0.1 :: V) -- 0.1 volts discharge per 1/2 Amp of output power over a time t
+    iDis = (1 / 2 :: Amp)
+    dchgVAtI = (0.1 :: V)
+    iChg = (1 / 2 :: Amp)
+                    
+
+ahToColoumb :: AmpH -> Q
+ahToColoumb ah = ah * 3600
+
+defaultState :: BatteryState
+defaultState = BatteryState 0 0 0 0
+
+defaultObs :: BatteryObservation
+defaultObs = BatteryObservation 0 0 0
+
+mkBattery :: Battery
+mkBattery = Battery defaultParameters defaultState defaultObs
 
 stateNext :: BatteryParameters -> BatteryState -> BatteryObservation -> BatteryState
-stateNext BatteryParameters {..} BatteryState {..} BatteryObservation {..} =
-  BatteryState $ ztNext etNext ptNext
+stateNext BatteryParameters {..} BatteryState {..} BatteryObservation {..} = BatteryState ztNext etNext dpNext cpNext
   where
-    ztNext = z_t - (del_t / Q)  - (ce * i_t)
+    ztNext = z_t - (dt / totalChargeCapacity)  - (ce * i_t)
       where
         ce = if (i_t <= 0) then fst coloumbicEff else snd coloumbicEff
-    etNext = totalChargeCapacity * vNominal * (zt_next - (qMin / totalChargeCapacity))
-    ptNext = (Discharge dp, Charge cp)
+    etNext = totalChargeCapacity * vNominal * (ztNext - (qMin / totalChargeCapacity))
+    cpNext = p vMin rDis
+    dpNext = p vMax rChg
+    p vRef r = vRef * ik
       where
-        dp = p vMin rDis
-        dc = p vMax rChg
-        p vRef r = vRef * ((ocv z_t - vRef) / r) 
-        ik = ((ocv ztNext) - vMin / rK)
-        rDis = delVDisAtI / iDis
-        rChg = delVChgAtI / iChg
+        ik = ((ocv z_t - vRef) / r)
+    rDis = delVDisAtI / iDis
+    rChg = delVChgAtI / iChg
+    ocv _ = vNominal         -- Horrible
+    dt = fromIntegral del_t
 
 
-cyclesCompleted :: BatteryState -> (ChargeHours, DischargeHours)
-cyclesCompleted (BatteryState zk) = len zk
+
+{--
+cyclesCompleted :: Battery -> Int
+cyclesCompleted (Battery _ _ o) = length o
 
 
 data ChargeEvent = CCCV {}
                  | CV {}
-                 deriving (Eq, Ord, Generic) deriving anyclass (Elm)
+                 deriving (Eq, Ord, Generic)
+                 deriving (Elm, ToJSON, FromJSON) via ElmStreet ChargeEvent
 
-data DischargeEvent = Scheduled | Unscheduled deriving (Eq, Ord, Generic)
-
-
-
-
-
-
-
-
--- Instances for elm type generation
-instance ToJSON BatteryObservation where toJSON = elmStreetToJson
-instance FromJSON BatteryObservation where fromJOSN = elmStreetFromJSON
-
-instance ToJSON BatteryState where toJSON = elmStreetToJson
-instance FromJSON BatteryState where fromJOSN = elmStreetFromJSON
-
-instance ToJSON BatteryParameters where toJSON = elmStreetToJson
-instance FromJSON BatteryParameters where fromJOSN = elmStreetFromJSON
-
-instance ToJSON ChargeEvent where toJSON = elmStreetToJSON
-instance FromJSON ChargeEvent where fromJSON = elmStreetFromJSON
+data DischargeEvent = Scheduled
+                    | Unscheduled
+                    deriving (Eq, Ord, Generic)
+                    deriving (Elm, ToJSON, FromJSON) via ElmStreet DischargeEvent
+--}
 
 
+
+{--
+charge :: Battery -> ChargeEvent -> Battery
+charge b e = undefined
+
+discharge :: Battery -> DischargeEvent -> Battery
+discharge b l = undefined
+--}
+
+{--
+
+Run an autoregressive representation of each battery parameter.
+Maintain a fold over all the batteries as the net grid energy G_e.
+Optimize for sum (netEnergy) - FearOfEOut * (all (each netEnergy n t > 0 forall n, t)) 
+
+--}
 
 
 {--
@@ -184,74 +208,8 @@ OCV(z(t), T(t))
 -}
 
 
-batterySoC :: BatteryParameters -> (BatteryState -> SoC)
-batterySoC bp = stateOfCharge bp 
-
-energyEstimate :: (Storage b) -> Wh
-energyEstimate b = undefined
-
-chargePower :: (Storage b) -> W
-chargePower b = undefined
-
-dischargePower :: (Storage b) -> W
-dischargePower b = undefined
-
-
-
-charge :: DelT ->  ChargeType -> BatteryState -> ET -> BatteryState
-charge delT (CCCV ct) BatteryState b{..} ET e{..} = b <> toStorageDiff 
-  where
-    toStorageDiff :: (ET -> BatteryState) -> ET -> BatteryState
-    
-  
-  
-    pMin = energy / tLength
-    voltage = 
-    current = chargePower b
-    
-  in 
-
-class LinearConstraint a where
-  quadraticSolver :: a -> Action a
-
-  
-class Storage a where
-  powerDist :: (LinearConstraint a) => Graph Dist a -> a
-  energyDist :: (LinearConstraint a) => Graph Dist a -> a
-  toStorageDiff (a -> BatteryState)
-  
-
-
-runBatteryStep Battery {BatteryState s, BatteryParameters p} = do
-  step <- (\(b, filer) -> if filter then charge b CCCV else charge b CV) =<< charge cccv
-   
-
-
-diffusionResistorCurrent :: Amp
-diffustionResistorCurrent _ = 0
-
-
-runStateOfCharge :: (Monad m) => BatteryParameters -> m Q -> Q
-runStateOfCharge = undefined
-
-runDischargePower :: (Monad m) => (ma -> a) -> ma -> a
-
-
-data Battery = Battery { p :: BatteryParameters, s :: BatteryState, c :: T, }
-
 
 {--
-data Battery = LithiumIon
-               { state :: BatteryState
-               , lithiumConcentrationAt0 :: R
-               , lithiumConcentrationAt100 :: R
-               }
-             | LeadAcid
-               { state :: BatteryState }
-             deriving (Eq, Ord, Show)
---}
-
-
 class Storage b where
   socEstimate :: b -> Volts -> Amperes ->  WattHours
   cycles :: b -> Int
@@ -261,22 +219,7 @@ class Storage b where
   capacityAtCycle :: b -> Int -> b
   updateCapacity :: b -> b
   dodLimits :: b -> (WattHours, WattHours)
-
-
-
-instance Storage Battery where
-  voltageToEnergyStored (LithiumIon b) v = undefined
-  voltageToEnergyStored (LeadAcid b) v = undefined
-  cycles b = (cyclesCompleted . state) b
-  capacity b = (currentCapacity . state) b
-  charge (LithiumIon b) = undefined
-  charge (LeadAcid b) = undefined
-  discharge (LithiumIon b) = undefined
-  discharge (LeadAcid b) = undefined
-  capacityAtCycle (LithiumIon b) cyc = undefined
-  capacityAtCycle (LeadAcid b) cyc = undefined
-  dodLimits b = both (voltageToEnergyStored b) $ dodLimitsV . state $ b
-  updateCapacity b{BatteryState {state}} = undefined
+--}
 
 
 {--
@@ -295,12 +238,6 @@ The simplest model for a cell is thus an ideal voltage source emitting a constan
 Open circuit here means that the cell is unloaded and in complete equilibrium.
 
 
---}
-
-
-
-
-{--
 A careful definition of the the state of charge:
 
 A cell is at a fully charged state after a Constant Current charging step has brought
@@ -332,20 +269,3 @@ where
    n_k = charge_discharge_efficiency
 
 --}
-
-stateOfCharge (LithiumIon b) = undefined
-
-constantPowerConstantVoltageCharge = undefined
-constantVoltageCharge BatteryState { t_high, v_high }  
-
-
-chargeBatteryAtInstant :: Battery -> Volts -> Amperes -> Battery
-chargeBatteryAtInstant b v i = b
-
--- first mode is constant current, all power maximally fed to battery
--- second regime is constant power -- range : 13.5v to 14.5v
--- third regime is drip-charging
-
--- low-voltage c
-
-

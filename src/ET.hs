@@ -1,8 +1,15 @@
 module ET () where
 
-
-import Env.Storage
 {--
+import Physics.Storage
+import Physics.Solar
+import Physics.Transmission
+import Physics.Consumption
+
+import Data.MemoTrie
+
+
+
 import Env.Gen
 import Env.Load
 
@@ -11,9 +18,8 @@ import Model.AutoRegressive (Dist)
 type R = Double
 
 type NodeState = (Storage, Gen, Load, Demand)
---}
 
-{--
+
 data Grid = Grid
   { demand :: Graph (Dist Watt) 
   , energyStored :: Graph (Dist WattHour)
@@ -35,9 +41,9 @@ transact {ET ..} = do
     nodeGap = ((stored + (delta_t * gen)) - demand)
    a <- (action . policy) toObsVector stored gen demand nodeGap
    return a
---}
 
-{--
+
+
 instance Serializable ET
 
 data SVG = SVG {}
@@ -58,7 +64,7 @@ instance PolicyFunction ET
 instance ValueFunction ET
 
 instance Rewarded ET
---}
+
 
 
 
@@ -75,3 +81,4 @@ instance Env ET where
   retrive = undefined
   subscribe = undefined
   publish = undefined
+--}

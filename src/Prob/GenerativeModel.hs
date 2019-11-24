@@ -1,9 +1,9 @@
-
+module Prob.GenerativeModel where
 
 import Streamly.Prelude as S
 import Streamly
-import Generic
 
+{---
 import Data.Functor.Rep
 import ConCat.Distribution
 import ConCat.Choice
@@ -64,3 +64,4 @@ generate topic = do
     conditioning = undefined
     subscribe = undefined
     
+--}

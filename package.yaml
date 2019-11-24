@@ -26,7 +26,12 @@ dependencies:
 - algebraic-graphs
 - time
 - astro
-
+- extra
+- elm-bridge
+- aeson
+- MemoTrie
+- parallel
+- fused-effects
 ghc-options:
 - -Wall
 - -Wcompat
