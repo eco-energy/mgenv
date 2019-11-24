@@ -132,6 +132,22 @@ packages:
     subdir: hardware
     git: https://github.com/conal/concat.git
     commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
+- completed:
+    subdir: .
+    cabal-file:
+      size: 9263
+      sha256: 758401e0508351e67778975742b32162c046d4bc6895d88c9389d879c0afc7f4
+    name: monad-bayes
+    version: 0.1.0.0
+    git: https://github.com/eco-energy/monad-bayes.git
+    pantry-tree:
+      size: 3138
+      sha256: bc80e987256d9fe23e0b5e9f3e462be5a095f09d3d1375402595d962765c9b84
+    commit: 8078cced02401f4c58f5fb15da6be8b71eb246ba
+  original:
+    subdir: .
+    git: https://github.com/eco-energy/monad-bayes.git
+    commit: 8078cced02401f4c58f5fb15da6be8b71eb246ba
 snapshots:
 - completed:
     size: 524130

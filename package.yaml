@@ -32,6 +32,7 @@ dependencies:
 - MemoTrie
 - parallel
 - fused-effects
+- monad-bayes
 ghc-options:
 - -Wall
 - -Wcompat

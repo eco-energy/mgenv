@@ -46,6 +46,10 @@ extra-deps:
       - examples
       - graphics
       - hardware
+  - git: https://github.com/eco-energy/monad-bayes.git
+    commit: 8078cced02401f4c58f5fb15da6be8b71eb246ba
+    subdirs:
+      - .
 #
 # extra-deps: []
 
