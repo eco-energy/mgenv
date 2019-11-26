@@ -33,6 +33,8 @@ dependencies:
 - parallel
 - fused-effects
 - monad-bayes
+- non-empty
+
 ghc-options:
 - -Wall
 - -Wcompat
