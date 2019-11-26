@@ -112,7 +112,7 @@ sampleBatterySpec = do
       d <- normal 0.9 0.2
       return (c, d)
   cap <- (uniformD [40, 50.. 400])
-  qMin <- liftM (*cap) (uniform 0.2 0.5)
+  qMin <- liftM (*cap) $ uniform 0.2 0.5
   qMax <- liftM (*cap) $ uniform 0.8 0.99
   vNom <- normal 12 0.5
   vMax <- liftM ((+) vNom . abs) $ normal 2.0 1.0
