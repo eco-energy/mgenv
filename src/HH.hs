@@ -6,10 +6,10 @@
 {-# LANGUAGE ConstraintKinds #-}
 module HH where
 
-import Physics.Storage (StorageSpec, BatteryState)
-import Physics.Generation (mkGen, GeneratorSpec)
-import Physics.Transmission (TransmissionState, outflow, inflow, TransmissionSpec)
-import Physics.Consumption (LoadSpec)
+import Physics.Storage (sampleBatterySpec, BatteryState)
+import Physics.Generation (sampleGenSpec, runGen)
+import Physics.Consumption (sampleLoadSpec)
+import Physics.Transmission (sampleTransmissionSpec, TransmissionState)
 import Physics.Units (R, Sec, Meters, GeoC, EuclideanC, ZonedTime, unZonedTime, Watts, Amp, V, DelT, WattsPerMeterSq)
 
 import Algebra.Graph.AdjacencyIntMap.Algorithm
@@ -30,9 +30,30 @@ data HH = HH
   { location :: GeoC
   , gridLoc  :: EuclideanC
   , storage  :: BatterySpec
-  , generator :: GeneratorSpec
-  , loads :: LoadSpec
+  , generation :: GeneratorSpec
+  , consumption :: LoadSpec
   } deriving (Eq, Show, Generic)
+
+
+-- This should be at grid level
+data EnvCond = EnvCond
+  { windSpeed :: MetersPerSecond
+  , ambientTemp :: R
+  } deriving (Eq, Ord, Show, Generic)
+
+
+setupDay :: GeographicCoordinates -> ZonedTime -> RiseSetMB
+setupDay loc day = sunRiseAndSet loc verticalShift lcd
+  where
+    lcd = zonedTimeToLCD day
+    verticalShift = 0.833333
+
+
+sampleEnvCond :: (MonadSample m) => m EnvCond
+sampleEnvCond = do
+  windSpeed <- liftM abs $ normal 1 5
+  ambientTemp <- normal 20 10
+  return $ EnvCond windSpeed ambientTemp
 
 
 data Demand = Demand { powerDraw :: Watts}
@@ -51,8 +72,8 @@ data NodeState = NodeState
 type ConvEff = R
 type MetersSq = R
 
-getGenPower :: Node -> Watts
-getGenPower Node { time, location, generation } = sum $ map power generation
+getGenPower :: HH -> ZonedTime -> Watts
+getGenPower Node { location, generation } = sum $ map power generation
   where
     power (s, e) = radiation * s * e
     radiation :: WattsPerMeterSq
@@ -63,8 +84,8 @@ toBatteryObs :: Amp -> V -> DelT -> BatteryObservation
 toBatteryObs i v t = BatteryObservation i v t
 
 
-updateSoC :: Battery -> Watts -> DelT -> Battery
-updateSoC (Battery { state, params }) p t = Battery params state' obs' 
+updateSoC :: BatterySpec -> BatteryState -> Watts -> DelT -> Battery
+updateSoC params state p t = Battery params state' obs' 
   where
     state' = stateNext params state obs'
     obs' = toBatteryObs v' i' t
