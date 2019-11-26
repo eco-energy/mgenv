@@ -7,7 +7,7 @@ module Physics.Units
    SoC, Efficiency,
    Sec, DelT,
    Meters,
-   GeoC, EuclideanC,
+   GeoC, EuclideanC, Temperature, MetersPerSecond,
    ZonedTime, unZonedTime,
    location) where
 
@@ -63,7 +63,9 @@ type GeoC = A.GeographicCoordinates
 
 type EuclideanC = (R, R, R)
 
+type Temperature = R
 
 location :: Double -> Double -> GeoC
 location lat long = A.GeoC (A.DD lat) (A.DD long)
 
+type MetersPerSecond = R
