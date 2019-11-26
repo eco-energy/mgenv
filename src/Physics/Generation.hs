@@ -1,33 +1,17 @@
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
-module Physics.Generation where
+module Physics.Generation  where
 
-import Physics.Solar
-import Physics.Units (R, Watts)
+import Physics.PV (samplePVSpec, PVSpec, runPV)
+import Control.Monad.Bayes.Class
 import GHC.Generics (Generic)
 
-type WattsPerMeterSq = R
-type Meter = R
 
-data PanelSpec = PanelSpec
-  { solarConvEff :: (WattsPerMeterSq)
-  , height :: Meter
-  , width :: Meter
-  } deriving (Eq, Show)
+data GenSpec = GenSpec PVSpec deriving (Eq, Ord, Show, Generic)
 
-panel :: PanelSpec -> (Watts -> a)
-panel p = undefined
+sampleGenSpec :: (MonadSample m) => m GenSpec
+sampleGenSpec = do
+  pv <- samplePVSpec
+  return $ GenSpec pv
 
---data PanelArray a = Serial a | Parallel a deriving (Eq, Ord, Show, Generic)
-
--- Current and Voltage Monoids, Power and Energy Functors (dissipative elements don't )
-
-
-data PanelArray = Serial | Parallel | PanelArray deriving (Eq, Ord, Show, Generic)
-
--- infix 9 -->
-
--- a (-->) b = Serial a b
-
--- infix 9 (|||)
-
--- a (|||) b = Parallel a b
+runGen loc (GenSpec pv) = runPV loc pv
