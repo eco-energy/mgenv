@@ -3,7 +3,7 @@
 {-# LANGUAGE RecordWildCards #-}
 module Physics.PV (runPV, samplePVSpec, PVSpec) where
 
-import RIO.Time
+import Data.Time (ZonedTime, utctDay, zonedTimeToUTC)
 import Data.Astro.Time.JulianDate
 import Data.Astro.Time.GregorianCalendar (dayNumber)
 import Data.Astro.Coordinate
