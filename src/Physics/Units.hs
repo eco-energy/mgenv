@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 module Physics.Units
-  (R, Q, V, Amp, Ohm,
+  (R, Q, V, Amp, Ohm, OhmMeters, MetersSq,
    W, Watts,
    AmpH, WH, WattHours,
    WattsPerMeter, WattsPerMeterSq,
@@ -69,3 +69,7 @@ location :: Double -> Double -> GeoC
 location lat long = A.GeoC (A.DD lat) (A.DD long)
 
 type MetersPerSecond = R
+
+type MetersSq = R
+
+type OhmMeters = R
