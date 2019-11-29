@@ -19,7 +19,7 @@ newtype ConsumptionSpec = ConsumptionSpec [Load] deriving (Eq, Ord, Show, Generi
 
 sampleLoadSpec :: (MonadSample m) => m Load
 sampleLoadSpec = do
-  p <- uniformD [1..100]
+  p <- uniformD [5, 10..200]
   u <- liftM abs $ normal 0.5 0.2
   hot <- bernoulli u
   return $ Load p u hot
