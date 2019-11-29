@@ -32,7 +32,7 @@ type Reward = R
 type HHState = (BatteryState, TransmissionState, ConsumptionState)
 
 data HHSpec = HHSpec
-  { location :: GeoC
+  { loc :: GeoC
   , gridLoc  :: EuclideanC
   , storage  :: BatterySpec
   , generation :: GenSpec
@@ -50,7 +50,7 @@ sampleHH loc grloc = do
 runHH :: HHSpec -> ZonedTime -> EnvCond -> State HHState Reward
 runHH HHSpec {..} time EnvCond {..} = undefined
   where
-    generated = runGen location generation time ambientTemp windSpeed
+    generated = runGen loc generation time ambientTemp windSpeed
     -- (c', consumed) = runConsumption consumption
   --(t', (transmitted, lost)) <- runTransmission
   --let
