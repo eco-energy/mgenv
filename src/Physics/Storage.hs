@@ -2,7 +2,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DataKinds #-}
-module Physics.Storage where
+module Physics.Storage (BatteryState, BatterySpec, sampleBatterySpec, stateNext) where
 
 import Data.Tuple.Extra ()
 import GHC.Generics hiding (R)
@@ -121,10 +121,8 @@ sampleBatterySpec = do
   dischargeRefCurr <- uniform 0.1 40
   chargeDeltaV <- uniform 0.1 0.5
   chargeRefCurr <- uniform 0.1 40
-  let
-    spec = BatterySpec eff cap qMin qMax vNom vMin vMax dischargeDeltaV dischargeRefCurr chargeDeltaV chargeRefCurr
-  return spec
-  
+  return $ batterySpec eff cap qMin qMax vNom vMin vMax dischargeDeltaV dischargeRefCurr chargeDeltaV chargeRefCurr
+
 ahToColoumb :: AmpH -> Q
 ahToColoumb ah = ah * 3600
 
@@ -140,6 +138,7 @@ defaultObs = BatteryObservation 0 0 0
 mkBattery :: Battery
 mkBattery = Battery defaultParameters defaultState defaultObs
 
+batterySpec :: Eff -> AmpH -> AmpH -> AmpH -> V -> V -> V -> V -> Amp -> V -> Amp -> BatterySpec
 batterySpec = BatterySpec
 
 toEff c d = (c, d) :: Eff
