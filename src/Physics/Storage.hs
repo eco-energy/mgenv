@@ -2,7 +2,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DataKinds #-}
-module Physics.Storage (BatteryState, BatterySpec, sampleBatterySpec, stateNext) where
+module Physics.Storage (BatteryState, BatterySpec, sampleBatterySpec, stateNext, initBatteryState) where
 
 import Data.Tuple.Extra ()
 import GHC.Generics hiding (R)
@@ -129,8 +129,8 @@ ahToColoumb ah = ah * 3600
 coloumbToAh :: Q -> AmpH
 coloumbToAh c = c / 3600
 
-defaultState :: BatteryState
-defaultState = BatteryState 0 0 0 0
+initBatteryState :: BatteryState
+initBatteryState = BatteryState 0 0 0 0
 
 defaultObs :: BatteryObservation
 defaultObs = BatteryObservation 0 0 0
