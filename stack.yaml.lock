@@ -148,6 +148,13 @@ packages:
     subdir: .
     git: https://github.com/eco-energy/monad-bayes.git
     commit: 8078cced02401f4c58f5fb15da6be8b71eb246ba
+- completed:
+    hackage: geodetics-0.1.0@sha256:699c10cd8d69222b125d054cdc8e2bcee7cb0558c78fa1b4fa06b2d3ecf29f5c,2387
+    pantry-tree:
+      size: 1086
+      sha256: e1c0342b02b90ed50a0d6529084bc3938a12c6d8ad207248b17a3cdd1199381c
+  original:
+    hackage: geodetics-0.1.0@sha256:699c10cd8d69222b125d054cdc8e2bcee7cb0558c78fa1b4fa06b2d3ecf29f5c,2387
 snapshots:
 - completed:
     size: 524130
