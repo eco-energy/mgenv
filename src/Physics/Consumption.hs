@@ -1,28 +1,38 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveGeneric #-}
-module Physics.Consumption where
+module Physics.Consumption
+  ( ConsumptionSpec
+  , sampleConsumptionSpec
+  , ConsumptionState
+  , initConsumptionState
+  , runConsumption) where
 
 import Physics.Units
 import GHC.Generics (Generic)
 import Control.Monad.Bayes.Class
-import Control.Monad (replicateM, liftM, replicateM)
+import Control.Monad (replicateM, liftM, replicateM, mapM)
 
 data Load = Load
   { power :: Watts
   , utility :: R
-  , isRunning :: Bool
   } deriving (Eq, Ord, Show, Generic)
 
 
+data LoadState = LoadState
+  { load :: Load
+  , isRunning :: Bool
+  } deriving (Eq, Ord, Show, Generic) 
+
 newtype ConsumptionSpec = ConsumptionSpec [Load] deriving (Eq, Ord, Show, Generic)
+
+newtype ConsumptionState = ConsumptionState [LoadState] deriving (Eq, Ord, Show, Generic)
 
 sampleLoadSpec :: (MonadSample m) => m Load
 sampleLoadSpec = do
   p <- uniformD [5, 10..200]
   u <- liftM abs $ normal 0.5 0.2
-  hot <- bernoulli u
-  return $ Load p u hot
+  return $ Load p u
 
 sampleConsumptionSpec :: MonadSample m => m ConsumptionSpec
 sampleConsumptionSpec = do
@@ -33,14 +43,22 @@ sampleConsumptionSpec = do
 runLoad :: Load -> V -> Amp
 runLoad Load {..} batteryV = power / batteryV
 
-runConsumption :: (MonadSample m) => ConsumptionSpec -> m (ConsumptionSpec, Watts)
-runConsumption (ConsumptionSpec loads) = do
+initConsumptionState :: (MonadSample m) => ConsumptionSpec -> m ConsumptionState
+initConsumptionState (ConsumptionSpec loads) = do
   let
-    updateState :: (MonadSample m) => Load -> m Load
+    hot Load {utility} = bernoulli utility
+  states <- mapM hot loads
+  return $ ConsumptionState (map (\(l, s)-> LoadState l s) $ zip loads states) 
+
+
+runConsumption :: (MonadSample m) => ConsumptionState -> m (ConsumptionState, Watts)
+runConsumption (ConsumptionState loads) = do
+  let
+    updateState :: (MonadSample m) => LoadState -> m LoadState
     updateState l = do
-      newState <- bernoulli (utility l)
+      newState <- bernoulli ((utility . load) l)
       return l {isRunning=newState}
   cs' <-  mapM updateState loads
   let
-    consumed = sum $ map power $ filter isRunning loads
-  return (ConsumptionSpec $ cs', consumed)
+    consumed = sum $ map (power . load) $ filter isRunning loads
+  return (ConsumptionState $ cs', consumed)
