@@ -9,7 +9,7 @@ module Physics.Units
    Meters,
    GeoC, EuclideanC, Temperature, MetersPerSecond,
    ZonedTime, unZonedTime,
-   location) where
+   location, haversine, reverseHaversine) where
 
 
 import qualified Data.Astro.Coordinate as A
@@ -61,7 +61,7 @@ type Meters = R
 
 type GeoC = A.GeographicCoordinates
 
-type EuclideanC = (R, R, R)
+type EuclideanC = (Meters, Meters)
 
 type Temperature = R
 
@@ -73,3 +73,35 @@ type MetersPerSecond = R
 type MetersSq = R
 
 type OhmMeters = R
+
+type Theta = R -- ANGLE
+
+
+toRadians :: Floating a => a -> a
+toRadians d = d * pi / 180
+
+toDegrees :: Floating a => a -> a
+toDegrees r = r * 180 / pi
+
+earthRad :: Meters
+earthRad = (6378137 :: Meters)
+
+haversine :: GeoC -> GeoC -> Meters
+haversine c0 c1 = earthRad * c
+  where
+    a = square (sin dlat) + cosr lat0 * cosr lat1 * square (sin dlon)
+    c = 2 * atan2 (sqrt a) (sqrt (1 - a))
+    dlat = toRadians (lat0 - lat1) / 2
+    dlon = toRadians (long0 - long1) / 2
+    cosr = cos . toRadians
+    square x = x * x
+    (A.GeoC (A.DD lat0) (A.DD long0)) = c0
+    (A.GeoC (A.DD lat1) (A.DD long1)) = c1
+  
+
+reverseHaversine :: GeoC -> Meters -> Theta -> GeoC
+reverseHaversine (A.GeoC (A.DD lat) (A.DD long)) d theta = location lat' long'
+  where
+    lat' = toDegrees $ asin ((sin lat * cos angDist) + (cos lat * sin angDist) + cos theta)
+    long' = toDegrees $ long + (atan2 (sin theta * sin angDist * cos lat) ((cos angDist) - (sin lat * sin lat')))
+    angDist = d / earthRad
