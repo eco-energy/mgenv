@@ -6,15 +6,20 @@
 {-# LANGUAGE ConstraintKinds #-}
 module HH where
 
-import Physics.Storage (sampleBatterySpec, BatteryState)
-import Physics.Generation (sampleGenSpec, runGen)
-import Physics.Consumption (sampleLoadSpec)
-import Physics.Transmission (sampleTransmissionSpec, TransmissionState)
-import Physics.Units (R, Sec, Meters, GeoC, EuclideanC, ZonedTime, unZonedTime, Watts, Amp, V, DelT, WattsPerMeterSq)
+import Data.Time (ZonedTime)
+import Streamly
+import Streamly.Prelude as S
 
-import Algebra.Graph.AdjacencyIntMap.Algorithm
-import Algebra.Graph.AdjacencyIntMap
 import GHC.Generics (Generic)
+
+import Control.Monad.State
+
+import Control.Monad.Bayes.Class
+import Physics.Storage (sampleBatterySpec, initBatteryState, BatteryState, BatterySpec)
+import Physics.Generation (sampleGenSpec, runGen, GenSpec)
+import Physics.Consumption (initConsumptionState, sampleConsumptionSpec, runConsumption, ConsumptionSpec, ConsumptionState)
+import Physics.Transmission (sampleTransmissionSpec, runTransmission, TransmissionSpec, TransmissionState, initTransmissionState)
+import Physics.Units (R, Sec, Meters, GeoC, EuclideanC, Watts, Amp, V, DelT, WattsPerMeterSq, MetersPerSecond, Temperature)
 
 
 -- A household tracks three types of State:
@@ -24,39 +29,63 @@ import GHC.Generics (Generic)
 
 type Reward = R
 
-type HHState = State (Battery, TransmissionState, ConsumptionState)
+type HHState = (BatteryState, TransmissionState, ConsumptionState)
 
-data HH = HH
+data HHSpec = HHSpec
   { location :: GeoC
   , gridLoc  :: EuclideanC
   , storage  :: BatterySpec
-  , generation :: GeneratorSpec
-  , consumption :: LoadSpec
+  , generation :: GenSpec
+  , consumption :: ConsumptionSpec
   } deriving (Eq, Show, Generic)
 
+sampleHH :: (MonadSample m) => GeoC -> EuclideanC -> m HHSpec
+sampleHH loc grloc = do
+  storage <- sampleBatterySpec
+  gen <- sampleGenSpec
+  consump <- sampleConsumptionSpec
+  return $ HHSpec loc grloc storage gen consump
+
+
+runHH :: HHSpec -> ZonedTime -> EnvCond -> State HHState Reward
+runHH HHSpec {..} time EnvCond {..} = undefined
+  where
+    generated = runGen location generation time ambientTemp windSpeed
+    -- (c', consumed) = runConsumption consumption
+  --(t', (transmitted, lost)) <- runTransmission
+  --let
+  --  batteryDiff = generated + consumed + transmitted + lost
+  --b' <- runBattery batteryDiff
+  --put (b', t', c')
+
+initHHState :: MonadSample m => ConsumptionSpec -> m HHState
+initHHState cSpec = do
+  cs <- initConsumptionState cSpec
+  return (initBatteryState, initTransmissionState, cs)
+  
+    
 
 -- This should be at grid level
 data EnvCond = EnvCond
   { windSpeed :: MetersPerSecond
-  , ambientTemp :: R
+  , ambientTemp :: Temperature
   } deriving (Eq, Ord, Show, Generic)
 
-
-setupDay :: GeographicCoordinates -> ZonedTime -> RiseSetMB
-setupDay loc day = sunRiseAndSet loc verticalShift lcd
+{--
+setupDay :: GeoC -> ZonedTime -> (ZonedTime, ZonedTime)
+setupDay loc day = (start, end)
   where
+    (start, end) = sunRiseAndSet loc verticalShift lcd
     lcd = zonedTimeToLCD day
     verticalShift = 0.833333
-
+--}
 
 sampleEnvCond :: (MonadSample m) => m EnvCond
 sampleEnvCond = do
   windSpeed <- liftM abs $ normal 1 5
   ambientTemp <- normal 20 10
   return $ EnvCond windSpeed ambientTemp
-
-
-data Demand = Demand { powerDraw :: Watts}
+--}
 
 {--
 data NodeState = NodeState
@@ -69,9 +98,10 @@ data NodeState = NodeState
   } deriving (Eq, Show, Generic)
 --}
 
-type ConvEff = R
-type MetersSq = R
 
+
+
+{--
 getGenPower :: HH -> ZonedTime -> Watts
 getGenPower Node { location, generation } = sum $ map power generation
   where
@@ -84,8 +114,8 @@ toBatteryObs :: Amp -> V -> DelT -> BatteryObservation
 toBatteryObs i v t = BatteryObservation i v t
 
 
-updateSoC :: BatterySpec -> BatteryState -> Watts -> DelT -> Battery
-updateSoC params state p t = Battery params state' obs' 
+updateSoC :: BatterySpec -> BatteryState -> Watts -> DelT -> BatteryState
+updateSoC params state p t = BatteryState params state' obs' 
   where
     state' = stateNext params state obs'
     obs' = toBatteryObs v' i' t
@@ -98,7 +128,7 @@ recieve n p = n { storage = (updateSoC (storage n) p systemDelT) }
 
 consume :: Node -> Demand -> Node
 consume n Demand {..} = n { storage = (updateSoC (storage n) powerDraw systemDelT) }
-
+--}
   
 
 
