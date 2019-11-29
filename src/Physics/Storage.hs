@@ -136,7 +136,7 @@ defaultObs :: BatteryObservation
 defaultObs = BatteryObservation 0 0 0
 
 mkBattery :: Battery
-mkBattery = Battery defaultParameters defaultState defaultObs
+mkBattery = Battery defaultParameters initBatteryState defaultObs
 
 batterySpec :: Eff -> AmpH -> AmpH -> AmpH -> V -> V -> V -> V -> Amp -> V -> Amp -> BatterySpec
 batterySpec = BatterySpec
