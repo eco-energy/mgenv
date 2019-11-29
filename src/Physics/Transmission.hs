@@ -1,14 +1,12 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveGeneric #-}
-module Physics.Transmission where
+module Physics.Transmission (TransmissionSpec, TransmissionState, initTransmissionState, sampleTransmissionSpec, runTransmission) where
 
 import Physics.Units
 import GHC.Generics (Generic)
 import Control.Monad.Bayes.Class
 
-class Transmission a where
-  thing :: a
 
 {--
 data EdgeState = EdgeState
@@ -33,9 +31,8 @@ data TransmissionSpec = TransmissionSpec
   , resistance :: Ohm
   } deriving (Eq, Show, Ord, Generic)
 
-sampleTransmissionSpec :: (MonadSample m) => m TransmissionSpec
-sampleTransmissionSpec = do
-  wireLength <- uniform 10 100
+sampleTransmissionSpec :: (MonadSample m) => Meters -> m TransmissionSpec
+sampleTransmissionSpec wireLength = do
   diameter <- uniformD [i / 1000 | i <- [0.75..10]]
   resistivity <- normal 1.724e-8 ((1.724e-8 * 2) / 100)
   let
@@ -43,6 +40,11 @@ sampleTransmissionSpec = do
     resistance = (wireLength * resistivity) / crossSection
   return $ TransmissionSpec wireLength crossSection resistivity resistance
 
+data Transmission = Transmission
+  { v0 :: V
+  , i0 :: Amp
+  , v1 :: V
+  } deriving (Eq, Ord, Show, Generic)
 
 runTransmission :: TransmissionSpec -> V -> Amp -> (Watts, Watts)
 runTransmission TransmissionSpec {resistance} v i = (outP, loss)
@@ -52,3 +54,6 @@ runTransmission TransmissionSpec {resistance} v i = (outP, loss)
 
 data TransmissionState = TransmissionState
   { current :: Amp, voltage :: V } deriving (Eq, Show, Ord, Generic)
+
+initTransmissionState :: TransmissionState
+initTransmissionState = TransmissionState 0 0
