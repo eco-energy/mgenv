@@ -21,34 +21,34 @@ import Physics.Consumption (initConsumptionState, sampleConsumptionSpec, runCons
 import Physics.Transmission (sampleTransmissionSpec, runTransmission, TransmissionSpec, TransmissionState, initTransmissionState)
 import Physics.Units (R, Sec, Meters, GeoC, EuclideanC, Watts, Amp, V, DelT, WattsPerMeterSq, MetersPerSecond, Temperature)
 
-
 -- A household tracks three types of State:
 -- (Storage, Consumption, Transmission)
 -- This state results in a Reward at the end of an episode
-
+type NodeId = Int
 
 type Reward = R
 
 type HHState = (BatteryState, TransmissionState, ConsumptionState)
 
 data HHSpec = HHSpec
-  { loc :: GeoC
+  { nId :: NodeId
+  , loc :: GeoC
   , gridLoc  :: EuclideanC
   , storage  :: BatterySpec
   , generation :: GenSpec
   , consumption :: ConsumptionSpec
   } deriving (Eq, Show, Generic)
 
-sampleHH :: (MonadSample m) => GeoC -> EuclideanC -> m HHSpec
-sampleHH loc grloc = do
+sampleHH :: (MonadSample m) => NodeId -> GeoC -> EuclideanC -> m HHSpec
+sampleHH n loc grloc = do
   storage <- sampleBatterySpec
   gen <- sampleGenSpec
   consump <- sampleConsumptionSpec
-  return $ HHSpec loc grloc storage gen consump
+  return $ HHSpec n loc grloc storage gen consump
 
 
-runHH :: HHSpec -> ZonedTime -> EnvCond -> State HHState Reward
-runHH HHSpec {..} time EnvCond {..} = undefined
+runHH :: HHSpec -> ZonedTime -> MetersPerSecond -> Temperature -> State HHState Reward
+runHH HHSpec {..} time windSpeed ambientTemp = undefined
   where
     generated = runGen loc generation time ambientTemp windSpeed
     -- (c', consumed) = runConsumption consumption
@@ -65,27 +65,6 @@ initHHState cSpec = do
   
     
 
--- This should be at grid level
-data EnvCond = EnvCond
-  { windSpeed :: MetersPerSecond
-  , ambientTemp :: Temperature
-  } deriving (Eq, Ord, Show, Generic)
-
-{--
-setupDay :: GeoC -> ZonedTime -> (ZonedTime, ZonedTime)
-setupDay loc day = (start, end)
-  where
-    (start, end) = sunRiseAndSet loc verticalShift lcd
-    lcd = zonedTimeToLCD day
-    verticalShift = 0.833333
---}
-
-sampleEnvCond :: (MonadSample m) => m EnvCond
-sampleEnvCond = do
-  windSpeed <- liftM abs $ normal 1 5
-  ambientTemp <- normal 20 10
-  return $ EnvCond windSpeed ambientTemp
---}
 
 {--
 data NodeState = NodeState
