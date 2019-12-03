@@ -27,15 +27,14 @@ dummyBatteryV :: MonadAsync m => SerialT m V
 dummyBatteryV = asyncly $ constRate 1 $ S.repeatM $ liftIO $ return $ (12 :: V)
 
 
-
+{--
 dutyCycle :: PIConstants -> Serial Amp -> Serial Amp -> Serial DutyCycle
 dutyCycle PIConstants {..} iRef iIn = do
   iRefT <- S.take 1 iRef
   iInT <- S.take 1 iIn
   let
-    iDiffIntegral = S.sum $ S.zipWith (-) iIn iRef
     piPart = (kPI*(iRefT - iInT))
-  return $ iDiffIntegral >>= (\integrated -> piPart + (kII* integrated))
+  return $ liftIO (S.sum $ S.zipWith (-) iIn iRef) >>= (\integrated -> piPart + (kII* integrated))
 
-
+--}
 --iRef :: OperationMode -> 
