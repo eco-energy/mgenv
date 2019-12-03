@@ -7,7 +7,7 @@ module Physics.Units
    SoC, Efficiency,
    Sec, DelT,
    Meters,
-   GeoC, EuclideanC, Temperature, MetersPerSecond,
+   GeoC, EuclideanC, Temperature, MetersPerSecond, Theta,
    ZonedTime, unZonedTime,
    location, haversine, reverseHaversine) where
 
