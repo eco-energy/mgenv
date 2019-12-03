@@ -35,6 +35,11 @@ dependencies:
 - monad-bayes
 - non-empty
 - geodetics
+- mtl
+- hgeometry
+- hgeometry-combinatorial
+- containers
+- lens
 
 ghc-options:
 - -Wall
@@ -68,6 +73,7 @@ tests:
     dependencies:
     - mgenv
     - hspec
+    - QuickCheck
 
     ghc-options:
     - -threaded
