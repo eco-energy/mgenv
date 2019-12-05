@@ -149,6 +149,22 @@ packages:
     git: https://github.com/eco-energy/monad-bayes.git
     commit: 8078cced02401f4c58f5fb15da6be8b71eb246ba
 - completed:
+    subdir: .
+    cabal-file:
+      size: 1541
+      sha256: 76c4a00df281f099ed8ae70877f72d35202197b9d200b838d8f87e1e7b3769b7
+    name: elminator
+    version: 0.2.4.1
+    git: https://github.com/sras/elminator.git
+    pantry-tree:
+      size: 917
+      sha256: c13b5bdd79dddac72b1977bd14d8e5e5f90cf8635a562d8e1829faa4e7a5d9ff
+    commit: c33566b6714a757b93f60e6bd8a6866c7ffc33b2
+  original:
+    subdir: .
+    git: https://github.com/sras/elminator.git
+    commit: c33566b6714a757b93f60e6bd8a6866c7ffc33b2
+- completed:
     hackage: geodetics-0.1.0@sha256:699c10cd8d69222b125d054cdc8e2bcee7cb0558c78fa1b4fa06b2d3ecf29f5c,2387
     pantry-tree:
       size: 1086

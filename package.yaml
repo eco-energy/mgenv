@@ -40,6 +40,12 @@ dependencies:
 - hgeometry-combinatorial
 - containers
 - lens
+- concat-classes
+- concat-examples
+- concat-plugin
+- text
+- elminator
+- adjunctions
 
 ghc-options:
 - -Wall
