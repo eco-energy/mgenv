@@ -31,14 +31,33 @@ data TransmissionSpec = TransmissionSpec
   , resistance :: Ohm
   } deriving (Eq, Show, Ord, Generic)
 
+instance Semigroup TransmissionSpec where
+  (<>) ts1 ts2 = TransmissionSpec wl' cs' rvity' r'
+    where
+      wl' = l1 + l2
+      cs' = avg cs1 cs2
+      rvity' = avg rvity1 rvity2
+      r' = wResistance wl' cs' rvity'
+      avg a b = (a + b / 2)
+      (TransmissionSpec {wireLength=l1, crossSection=cs1, resistivity=rvity1}) = ts1
+      (TransmissionSpec {wireLength=l2, crossSection=cs2, resistivity=rvity2}) = ts2
+
+instance Monoid TransmissionSpec where
+  mempty = TransmissionSpec 0 0 0 0
+  
+
 sampleTransmissionSpec :: (MonadSample m) => Meters -> m TransmissionSpec
 sampleTransmissionSpec wireLength = do
   diameter <- uniformD [i / 1000 | i <- [0.75..10]]
   resistivity <- normal 1.724e-8 ((1.724e-8 * 2) / 100)
   let
     crossSection = pi * (diameter / 2)**2
-    resistance = (wireLength * resistivity) / crossSection
-  return $ TransmissionSpec wireLength crossSection resistivity resistance
+    r = wResistance wireLength crossSection resistivity
+  return $ TransmissionSpec wireLength crossSection resistivity r
+
+
+wResistance :: Meters -> OhmMeters -> MetersSq -> Ohm
+wResistance wireLength resistivity crossSection = (wireLength * resistivity) / crossSection
 
 data Transmission = Transmission
   { v0 :: V
