@@ -4,22 +4,61 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ConstraintKinds #-}
-module HH where
+module HH
+  ( sampleHH
+  , HHSpec
+  , gridLoc
+  , NodeId
+  , HHState
+  , hhStep
+  ) where
 
-import Data.Time (ZonedTime)
-import Streamly
-import Streamly.Prelude as S
 
 import GHC.Generics (Generic)
 
 import Control.Monad.State
 
 import Control.Monad.Bayes.Class
-import Physics.Storage (sampleBatterySpec, initBatteryState, BatteryState, BatterySpec)
-import Physics.Generation (sampleGenSpec, runGen, GenSpec)
-import Physics.Consumption (initConsumptionState, sampleConsumptionSpec, runConsumption, ConsumptionSpec, ConsumptionState)
-import Physics.Transmission (sampleTransmissionSpec, runTransmission, TransmissionSpec, TransmissionState, initTransmissionState)
-import Physics.Units (R, Sec, Meters, GeoC, EuclideanC, Watts, Amp, V, DelT, WattsPerMeterSq, MetersPerSecond, Temperature)
+import Physics.Storage
+  ( sampleBatterySpec
+  , BatteryState
+  , BatterySpec
+  , batteryVoltage
+  , stateNext
+  , energyStored
+  )
+
+import Physics.Generation
+  ( sampleGenSpec
+  , runGen
+  , GenSpec
+  )
+  
+import Physics.Transmission
+  ( TransmissionState
+  , initTransmissionState)
+
+import Physics.Units
+  ( unZonedTime
+  , R
+  , GeoC
+  , EuclideanC
+  , Watts
+  , Amp
+  , DelT
+  , MetersPerSecond
+  , Temperature
+  , ZonedTime
+  , unZonedTime
+  )
+
+import Physics.Consumption
+  ( ConsumptionSpec
+  , ConsumptionState
+  , sampleConsumptionSpec
+  , initConsumptionState
+  , runConsumption
+  )
 
 -- A household tracks three types of State:
 -- (Storage, Consumption, Transmission)
@@ -28,7 +67,7 @@ type NodeId = Int
 
 type Reward = R
 
-type HHState = (BatteryState, TransmissionState, ConsumptionState)
+type HHState = (BatteryState, ConsumptionState)
 
 data HHSpec = HHSpec
   { nId :: NodeId
@@ -39,6 +78,10 @@ data HHSpec = HHSpec
   , consumption :: ConsumptionSpec
   } deriving (Eq, Show, Generic)
 
+instance Ord HHSpec where
+  a `compare` b = (nId a) `compare` (nId b)
+
+
 sampleHH :: (MonadSample m) => NodeId -> GeoC -> EuclideanC -> m HHSpec
 sampleHH n loc grloc = do
   storage <- sampleBatterySpec
@@ -46,67 +89,41 @@ sampleHH n loc grloc = do
   consump <- sampleConsumptionSpec
   return $ HHSpec n loc grloc storage gen consump
 
+data Transmission = Transmission Watts Amp
 
-runHH :: HHSpec -> ZonedTime -> MetersPerSecond -> Temperature -> State HHState Reward
-runHH HHSpec {..} time windSpeed ambientTemp = undefined
-  where
-    generated = runGen loc generation time ambientTemp windSpeed
-    -- (c', consumed) = runConsumption consumption
-  --(t', (transmitted, lost)) <- runTransmission
-  --let
-  --  batteryDiff = generated + consumed + transmitted + lost
-  --b' <- runBattery batteryDiff
-  --put (b', t', c')
+hhStep' :: (MonadSample m) => HHSpec -> DelT -> ZonedTime -> MetersPerSecond -> Temperature -> Transmission -> StateT HHState m Reward
+hhStep' HHSpec {..} delT time windSpeed ambientTemp transmission = do
+  (bs, cs) <- get
+  (cs', consumed) <- runConsumption cs
+  let
+    (Transmission _ tc) = transmission
+    generated = runGen loc generation (unZonedTime time) ambientTemp windSpeed
+    bV = batteryVoltage bs
+    generationCurrent = generated / bV
+    consumptionCurrent = consumed / bV
+    batteryCurrent = tc + generationCurrent + consumptionCurrent
+    bs' = stateNext storage bs batteryCurrent delT 
+    reward = (energyStored bs') + consumed
+  put (bs', cs')
+  return reward
 
-initHHState :: MonadSample m => ConsumptionSpec -> m HHState
-initHHState cSpec = do
-  cs <- initConsumptionState cSpec
-  return (initBatteryState, initTransmissionState, cs)
-  
-    
-
-
-{--
-data NodeState = NodeState
-  { time :: NodeTime
-  , stored :: (Storage a => a -> WattHours)
-  , chargePower :: (Storage a => a -> Watts)
-  , dischargePower :: (Storage a => a -> Watts)
-  , generation :: (Generator a => a -> (Watts, Sec))
-  , consumption :: (Consumer a => a -> (Watts, Sec))
-  } deriving (Eq, Show, Generic)
---}
-
+hhStep :: (MonadSample m) => HHSpec -> (DelT -> ZonedTime -> MetersPerSecond -> Temperature -> Transmission -> StateT HHState m Reward)
+hhStep hspec = hhStep' hspec
 
 
 
 {--
-getGenPower :: HH -> ZonedTime -> Watts
-getGenPower Node { location, generation } = sum $ map power generation
-  where
-    power (s, e) = radiation * s * e
-    radiation :: WattsPerMeterSq
-    radiation = directRadiation location (unZonedTime time)
-
-
-toBatteryObs :: Amp -> V -> DelT -> BatteryObservation
-toBatteryObs i v t = BatteryObservation i v t
-
-
-updateSoC :: BatterySpec -> BatteryState -> Watts -> DelT -> BatteryState
-updateSoC params state p t = BatteryState params state' obs' 
-  where
-    state' = stateNext params state obs'
-    obs' = toBatteryObs v' i' t
-    (v', i') = applyConstantPower p
-    applyConstantPower = undefined
-
-
 recieve :: Node -> Watts -> Node
 recieve n p = n { storage = (updateSoC (storage n) p systemDelT) }
 
 consume :: Node -> Demand -> Node
 consume n Demand {..} = n { storage = (updateSoC (storage n) powerDraw systemDelT) }
+
+
+delT = timeDiffInSeconds time tp
+timeDiffInSeconds :: ZonedTime -> ZonedTime -> DelT
+timeDiffInSeconds = undefined
+
 --}
   
 

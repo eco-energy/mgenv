@@ -2,7 +2,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DataKinds #-}
-module Physics.Storage (BatteryState, BatterySpec, sampleBatterySpec, stateNext, initBatteryState) where
+module Physics.Storage (BatteryState, BatterySpec, sampleBatterySpec, stateNext, initBatteryState, batteryVoltage, Storage, energyStored) where
 
 import Data.Tuple.Extra ()
 import GHC.Generics hiding (R)
@@ -50,12 +50,13 @@ type Eff = (ChargeEfficiency, DischargeEfficiency)
 
 data BatteryObservation = BatteryObservation
                           { i_t :: Amp
-                          , v_t :: V
+                          , termV_t :: V
                           , duration :: DelT }
                         deriving (Eq, Show, Generic)
 
 data BatteryState = BatteryState
-  { z_t :: SoC
+  { v_t :: V
+  , z_t :: SoC
   , e_t :: WattHours
   , cp_t :: Watts
   , dp_t :: Watts
@@ -89,22 +90,6 @@ instance Storage BatteryState where
   dischargePower BatteryState { .. } = dp_t
   energyStored BatteryState { .. } = e_t
 
-
-defaultParameters :: BatterySpec
-defaultParameters = BatterySpec eff totCap qMin qMax vNom vMin vMax ddisVAtI iDis dchgVAtI iChg
-  where
-    eff = (0.85, 0.99) :: Eff
-    totCap = 120 :: AmpH
-    qMin = totCap * 0.5 :: AmpH
-    qMax = totCap * 0.9 :: AmpH
-    vNom = 12.3 :: V
-    vMin = 11.3 :: V
-    vMax = 14.3 :: V
-    ddisVAtI = 0.1 :: V -- 0.1 volts discharge per 1/2 Amp of output power over a time t
-    iDis = 0.5 :: Amp
-    dchgVAtI = 0.1 :: V
-    iChg = 0.5 :: Amp
-
 sampleBatterySpec :: MonadSample m => m BatterySpec
 sampleBatterySpec = do
   eff <- do
@@ -123,32 +108,11 @@ sampleBatterySpec = do
   chargeRefCurr <- uniform 0.1 40
   return $ batterySpec eff cap qMin qMax vNom vMin vMax dischargeDeltaV dischargeRefCurr chargeDeltaV chargeRefCurr
 
-ahToColoumb :: AmpH -> Q
-ahToColoumb ah = ah * 3600
-
-coloumbToAh :: Q -> AmpH
-coloumbToAh c = c / 3600
-
-initBatteryState :: BatteryState
-initBatteryState = BatteryState 0 0 0 0
-
-defaultObs :: BatteryObservation
-defaultObs = BatteryObservation 0 0 0
-
-mkBattery :: Battery
-mkBattery = Battery defaultParameters initBatteryState defaultObs
-
-batterySpec :: Eff -> AmpH -> AmpH -> AmpH -> V -> V -> V -> V -> Amp -> V -> Amp -> BatterySpec
-batterySpec = BatterySpec
-
-toEff c d = (c, d) :: Eff
-
-batteryState :: SoC -> WattHours -> Watts -> Watts -> BatteryState
-batteryState = BatteryState
 
 stateNext :: BatterySpec -> BatteryState -> Amp -> DelT -> BatteryState
-stateNext BatterySpec {..} BatteryState {..} current del_t = batteryState ztNext etNext dpNext cpNext
+stateNext BatterySpec {..} BatteryState {..} current del_t = batteryState vt_next ztNext etNext dpNext cpNext
   where
+    vt_next = v_t -- wrong
     ztNext :: SoC
     ztNext = z_t - (dt / (ahToColoumb totalChargeCapacity))  - (ce * current)
       where
@@ -165,6 +129,9 @@ stateNext BatterySpec {..} BatteryState {..} current del_t = batteryState ztNext
     rChg = internalResistance delVChgAtI iChg
     ocV = vNominal
     dt = fromIntegral del_t
+
+batteryVoltage :: BatteryState -> V
+batteryVoltage = v_t
 
 -- should always be greater than 0
 storedEnergy :: AmpH -> V -> SoC -> AmpH -> WattHours
@@ -189,6 +156,44 @@ ocvAtSoC BatterySpec {..} soc = vNominal
 power :: V -> Amp -> Watts
 power v i = v * i
 
+
+ahToColoumb :: AmpH -> Q
+ahToColoumb ah = ah * 3600
+
+coloumbToAh :: Q -> AmpH
+coloumbToAh c = c / 3600
+
+initBatteryState :: BatteryState
+initBatteryState = BatteryState 0 0 0 0 0
+
+defaultObs :: BatteryObservation
+defaultObs = BatteryObservation 0 0 0
+
+mkBattery :: Battery
+mkBattery = Battery defaultParameters initBatteryState defaultObs
+
+batterySpec :: Eff -> AmpH -> AmpH -> AmpH -> V -> V -> V -> V -> Amp -> V -> Amp -> BatterySpec
+batterySpec = BatterySpec
+
+toEff c d = (c, d) :: Eff
+
+batteryState :: V -> SoC -> WattHours -> Watts -> Watts -> BatteryState
+batteryState = BatteryState
+
+defaultParameters :: BatterySpec
+defaultParameters = BatterySpec eff totCap qMin qMax vNom vMin vMax ddisVAtI iDis dchgVAtI iChg
+  where
+    eff = (0.85, 0.99) :: Eff
+    totCap = 120 :: AmpH
+    qMin = totCap * 0.5 :: AmpH
+    qMax = totCap * 0.9 :: AmpH
+    vNom = 12.3 :: V
+    vMin = 11.3 :: V
+    vMax = 14.3 :: V
+    ddisVAtI = 0.1 :: V -- 0.1 volts discharge per 1/2 Amp of output power over a time t
+    iDis = 0.5 :: Amp
+    dchgVAtI = 0.1 :: V
+    iChg = 0.5 :: Amp
 
 {--
 cyclesCompleted :: Battery -> Int

@@ -46,6 +46,14 @@ dependencies:
 - text
 - elminator
 - adjunctions
+- distributive
+- warp
+- fast-logger
+- servant
+- servant-server
+- wai-middleware-static
+- bytestring
+- QuickCheck
 
 ghc-options:
 - -Wall

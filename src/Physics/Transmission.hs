@@ -9,16 +9,9 @@ import Control.Monad.Bayes.Class
 
 
 {--
-data EdgeState = EdgeState
-  { resistance :: Ohm
-  , vN1 :: V
-  , vN2 :: V
-  } deriving (Generic)
+Describe a potential field over a graph (voltage).
+Define a function that computes the current transfered 
 
-edgePower :: EdgeState -> Watts
-edgePower EdgeState {..} = (vN1 * (vN1 - vN2)) / resistance
-
-run = undefined
 --}
 
 p2pcurrent :: V -> V -> Ohm -> Amp
@@ -72,7 +65,19 @@ runTransmission TransmissionSpec {resistance} v i = (outP, loss)
     outP = (v*i) - loss
 
 data TransmissionState = TransmissionState
-  { current :: Amp, voltage :: V } deriving (Eq, Show, Ord, Generic)
+  { power :: Watts } deriving (Eq, Show, Ord, Generic)
+
+
+-- There should be a parallel Semigroup and a sequential semigroup,
+-- the former should be invariant wrt the voltage and sum the current and vice versa for the latter
+-- right now lets assume that the composition is parallel
+instance Semigroup TransmissionState where
+  (TransmissionState p1) <> (TransmissionState p2) = TransmissionState $ p1 + p2
+  
+
+instance Monoid TransmissionState where
+  mempty = initTransmissionState
+  
 
 initTransmissionState :: TransmissionState
-initTransmissionState = TransmissionState 0 0
+initTransmissionState = TransmissionState 0

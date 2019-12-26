@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
-module Physics.PV (runPV, samplePVSpec, PVSpec) where
+module Physics.PV where --(runPV, samplePVSpec, PVSpec) where
 
 import Data.Time (ZonedTime, utctDay, zonedTimeToUTC)
 import Data.Astro.Time.JulianDate
@@ -44,7 +44,7 @@ moduleTemp mount modT irradiance ambientTemp ws = irradiance * (exp (a + b + ws)
     p (GlassCellPolymerSheet) (InsulatedBack) = (-2.81, -0.0455)
     p (PolymerThinFilmSteel) (OpenRack) = (-3.58, -0.113)
     p (LinearConcentrator) (Tracker) = (-3.23, -0.130)
-    p _ _ = undefined
+    p _ _ = error "Not mount/module type pair"
 
 -- | https://pvpmc.sandia.gov/modeling-steps/2-dc-module-iv/cell-temperature/sandia-cell-temperature-model/ 
 cellTemp :: Temperature -> WattsPerMeterSq -> Temperature
