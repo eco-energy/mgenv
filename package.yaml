@@ -54,6 +54,7 @@ dependencies:
 - wai-middleware-static
 - bytestring
 - QuickCheck
+- vector-space
 
 ghc-options:
 - -Wall
