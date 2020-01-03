@@ -16,7 +16,7 @@ import qualified Algebra.Graph.Class as GC
 
 import GHC.Generics (Generic)
 
-import Scan (Pair(..), mkPair, BT, Scan(..))
+import Scan (Pair(..), mkPair, BT(..), mkPair,  Scan(..))
 
 --import Control.Arrow
 --import qualified Control.Category as C
@@ -78,9 +78,11 @@ instance (Monoid v) => Monoid (Node v) where
   mempty = mempty
 
 newtype Edge l v = Edge { getEdge :: Pair (Pair (Node v), l) } deriving (Eq, Ord, Show, Functor)
+-- can we learn an id and a morphism for a compositional category?
+-- perhaps symmetric monoidal ones. Can we learn a tensor product and a direct sum?
 
-instance Semigroup (Edge l v) where
-  
+edge n n' l = Edge (n :# n') :# l
+
 
 type EdgeSet l v = Set.Set (Edge l v)
 
@@ -94,22 +96,37 @@ type Input v = NodeSet v
 
 type Output v = (v -> NodeSet v)
 
+type EVI = EdgeSet R (VI R)
 
-newtype LGraph l v = LGraph { runLGraph :: (G.Graph (Edge l v) (Node v)) } deriving (Show, Generic)
+type NVI = NodeSet (VI R)
 
 
-mkLGraph :: (Functor f) => f l -> f v -> LGraph l v
-mkLGraph e v = undefined
+newtype LGraph l v = LGraph { runLGraph :: Pair (EVI, (NVI)) } deriving (Eq, Ord, Show, Generic)
 
+data LGraph' l v where
+  Empty :: LGraph' (Null l) (Null v)
+  Edge' :: (v, v) -> l -> LGraph' l v
+  Node' :: v -> LGraph' (Null l) v
+
+mkLGraph' :: (Applicative f) => f l -> f v -> LGraph l v
+mkLGraph' = undefined
+
+degenerateLGraph :: (Applicative f) => f v -> LGraph l v
+degenerateLGraph v = () :# genNode <*> v
+
+genNode (x, y) = Leaf mkVI x y 
+
+genGraph n gen = Set.map genNode gen
+
+zeroedGraph n = genGraph n (0, 0)
 
 
 instance Semigroup (LGraph l v) where
   (<>) (LGraph g) (LGraph g') = LGraph (G. g g')
 
+type Null a = Set.Set a
 
-newtype Cospan i o l v = Cospan { runCospan :: (LGraph l v, Input i, Output o)} 
-
-nullSet = Set.empty
+newtype Cospan i o l v = Cospan { runCospan :: (LGraph l v, LGraph (Null l) i, LGraph (Null l)  o)} 
 
 
 
@@ -118,13 +135,13 @@ type LCircC a b = (HasV a b) => Cospan (VI a) (VI a) b b
 
 -- i and o are degenerate l-graphs where the set of edges l is empty.
 attachInput :: Input v -> LGraph l v -> Cospan i o l v
-attachInput = mkCospan 
+attachInput = mkCospan
 
 attachOutput :: Output v -> LGraph l v -> Cospan i o l v
 attachOutput = undefined
 
 inputs :: Cospan i o l v -> Input v
-inputs (Cospan (LGraph g, NodeSet i, NodeSet o)) = i
+inputs (Cospan (LGraph g, LGraph i, LGraph o)) = i
 
 outputs :: Cospan i o l v -> Output v
 outputs (Cospan (LGraph g, NodeSet i, NodeSet o)) = o
