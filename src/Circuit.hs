@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
@@ -7,13 +9,26 @@ module Circuit where
 
 import qualified Data.Set as Set
 import qualified Data.Map as Map
-import qualified Algebra.Graph.Labelled as G
-import qualified Algebra.Graph.Labelled.AdjacencyMap as G
-import qualified Algebra.Graph.Class as GC
-import Scan (Pair(..), mkPair, BT, Scan(..))
-import Control.Arrow
 
-import Data.VectorSpace
+import qualified Algebra.Graph.Labelled as G
+import qualified Algebra.Graph.Labelled.AdjacencyMap as GM
+import qualified Algebra.Graph.Class as GC
+
+import GHC.Generics (Generic)
+
+import Scan (Pair(..), mkPair, BT, Scan(..))
+
+--import Control.Arrow
+--import qualified Control.Category as C
+import Prelude hiding (id, (.))
+
+import ConCat.Free.VectorSpace
+import ConCat.Free.Affine
+
+import ConCat.AD
+import ConCat.Category
+
+
 
 -- Context
 -- Network Diagrams of various systems have analogies.
@@ -43,41 +58,113 @@ type Z = (R, R, R) -- impedance
 type Voltage = Double
 type Current = Double
 
+
 newtype VI a = VI { unVI :: Pair a } deriving (Functor, Eq, Ord, Show)
+
 
 mkVI :: (a, a) -> VI a
 mkVI = VI . mkPair
 
+type P = VI R
+
 newtype Node v = Node { getNode :: v } deriving (Eq, Ord, Show, Functor)
 
-type NodeSet v = Set.Set (Node v)
+newtype NodeSet v = NodeSet (Set.Set (Node v))
 
 instance (Semigroup v) => Semigroup (Node v) where
-  (<>) (Node v) (Node v') = v <> v' 
+  (<>) (Node v) (Node v') = v <> v'
 
-instance (Monoid v) => Monoid Node v where
+instance (Monoid v) => Monoid (Node v) where
   mempty = mempty
 
+newtype Edge l v = Edge { getEdge :: Pair (Pair (Node v), l) } deriving (Eq, Ord, Show, Functor)
+
+instance Semigroup (Edge l v) where
+  
+
+type EdgeSet l v = Set.Set (Edge l v)
+
+type Source l v = Edge l v -> Node v
+
+type Target l v = Edge l v -> Node v
+
+type LabelMap l v = Map.Map (Edge l v) R
+
+type Input v = NodeSet v
+
+type Output v = (v -> NodeSet v)
 
 
-data Edge v l = Edge { getEdge :: Pair (Pair (Node v), l) } deriving (Eq, Ord, Show, Functor)
+newtype LGraph l v = LGraph { runLGraph :: (G.Graph (Edge l v) (Node v)) } deriving (Show, Generic)
 
-type EdgeSet v l = Set.Set (Edge v l)
 
-type Source v l = Edge v l -> Node v
+mkLGraph :: (Functor f) => f l -> f v -> LGraph l v
+mkLGraph e v = undefined
 
-type Target v l = Edge v l -> Node v
 
-type LabelMap v l = Map.Map (Edge v l) R
 
-type Input v = (v -> Node v)
+instance Semigroup (LGraph l v) where
+  (<>) (LGraph g) (LGraph g') = LGraph (G. g g')
 
-type Output v = (v -> Node v) 
 
-input :: Input (VI a) (VI a)
+newtype Cospan i o l v = Cospan { runCospan :: (LGraph l v, Input i, Output o)} 
+
+nullSet = Set.empty
+
+
+
+type LCircC a b = (HasV a b) => Cospan (VI a) (VI a) b b
+
+
+-- i and o are degenerate l-graphs where the set of edges l is empty.
+attachInput :: Input v -> LGraph l v -> Cospan i o l v
+attachInput = mkCospan 
+
+attachOutput :: Output v -> LGraph l v -> Cospan i o l v
+attachOutput = undefined
+
+inputs :: Cospan i o l v -> Input v
+inputs (Cospan (LGraph g, NodeSet i, NodeSet o)) = i
+
+outputs :: Cospan i o l v -> Output v
+outputs (Cospan (LGraph g, NodeSet i, NodeSet o)) = o
+
+unitCospan :: LGraph l v -> Cospan i o l v
+unitCospan = flip . flip Cospan
+
+-- N +y N'
+data lgraph :+- cospan = lgraph :+-- cospan deriving (Generic)
+
+
+
+seqCospan :: Cospan i o l v -> Cospan o o' l v -> Cospan fi fo' l v
+seqCospan (Cospan c) (Cospan c') = Cospan i o'' l' v'
+  where
+    l' :: (l -> l)
+    l' = undefined
+    v' = undefined
+
+
+
+tensorCospan :: Cospan i o l v -> Cospan i o l v -> Cospan i o l v
+tensorCospan (Cospan (LGraph g, NodeSet i, NodeSet o)) (Cospan (LGraph g', NodeSet i', NodeSet o')) = Cospan (g'', i'', o'')
+  where
+    e'' = Set.union G.edgeSet g G.edgeSet g'
+    g'' = Set.union G.vertexSet g G.vertexSet g'
+    n = G.vertexSet g
+    n' = G.vertexSet g'
+    e = G.edgeSet g
+    e' = G.edgeSet g'
+    l = (\(Edge ((_ :# l))) -> l)
+    l' = l
+    i'' = \n -> Set.union i n i' n -- how do you tensor morphisms?
+    o'' = \n -> Set.union o n o'n
+
+
+input :: VI a -> Input (VI a)
 input vi = Node vi
 
-output :: Output (VI a) (VI a)
+output :: VI a -> Output (VI a)
 output vi = Node vi
 
 -- Ohms Law, Kirchoff's Laws and the Principle of Minimum Power
@@ -88,17 +175,17 @@ voltage = first . unVI
 current :: (Num a, Fractional a) => VI a -> a
 current = second . unVI
 
-nodeVoltage :: (Node VI a) -> a
+nodeVoltage :: Node (VI a) -> a
 nodeVoltage = fmap voltage
 
-nodeCurrent :: (Node VI a) -> a
+nodeCurrent :: Node (VI a) -> a
 nodeCurrent = fmap current
 
 -- TODO: Use first and second
-source :: Source a
+source :: Source a b
 source e = first . first . getEdge
 
-target :: Target a
+target :: Target a b
 target e = second . first . getEdge
 
 label :: Edge l v -> l
@@ -110,42 +197,129 @@ resistance = label
 impedance :: Edge Z (VI a) -> Z
 impedance = label
 
-ohmsLaw :: Edge l v -> (Edge l v -> R) -> (Edge l v -> Current) -> Voltage
-ohmsLaw edge r' i' = (r' edge * i' edge) 
+data RLC a where
+  Resistor :: a -> RLC a
+  Inductor :: a -> RLC a
+  Capacitor :: a -> RLC a
+
+
+ohmsLaw :: Edge l v -> Voltage
+ohmsLaw (Edge a VI vi) = impedance edge * current vi
+ohmsLaw (Edge a VI(vi)) = resistance edge * current vi
 
 edgeVoltage :: (Num v, Fractional v) => Edge l v -> v
 edgeVoltage e = (nodeVoltage . source e) - (nodeVoltage . t e)
 
-newtype LGraph l v = LGraph { runLGraph :: Graph (Edge l v) (Node v) } deriving (Eq, Ord, Functor, Show)
 
-newtype Circ l v = Circ { runCirc :: LGraph l v :# Cospan (a -> v)  a v a}
+class AffLegRel k where
+  a :: k
 
-copair :: l :*: l' -> (e -> l) -> (e -> l')
-copair 
-
-
-composeViaPushout (Circ (LGraph g :# Cospan _ x n y)) (Circ (LGraph g' :# Cospan _ x' n' y')) = Circ (LGraph addToLGraph :# composeCospan)
-
-instance Category CircZ where
-  (.) = undefined
-                                          
-
---compose :: Circ l v -> Circ l v -> 
-
-type CircR = Circ R (VI R)
-
-type CircZ = Circ Z (VI R)
+-- SEMANTIC FUNCTION
+--blackbox :: LCirc l v -> AffLegRel k
+--blackbox = undefined
 
 
-newtype Cospan k x y z = Cospan { runCospan :: (x `k` y, z `k` y) } deriving (Functor)
 
-type VICospan = Cospan (:.) (VI R) (VI R) (VI R)
+--class Cospan a where
+--  toCospan :: a -> Cospan a
+--  fromCospan :: Cospan a -> a
+--  cospanSum     :: a :++ b
+--  cospanProduct :: a +** b
+--  cospanUnit    :: Cospan a
+--  cospanTensorProduct :: Tensor (Cospan a) (Cospan a)
+--
 
-circToCoSpan :: CircR -> Inputs VI -> Outputs VI -> VICospan
 
 
-mkCirc :: Circ
-mkCirc = Circ
+
+--instance Category (LGraph) where
+  -- the identity is the id LGraph
+--  id = LGraph . id
+--  (.) = undefined
+  -- the morphisms are the
+
+{--
+newtype LCirc i o l v = LCirc { runLCirc :: (LGraph l v, Cospan i o v) }
+
+instance (Monoid l, Monoid v) => Category (LCirc l v) where
+  id = LCirc id
+  (.) (LCirc LGraph g :# Cospan i o g'') (LCirc LGraph g' :# Cospan i' o' c' g''') = LCircZ
+
+mkCirc :: l -> v -> LCirc l v
+mkCirc l v = (mkLGraph l v) :# toCospan
+
+{--
+class LCircuit x n y l' e n where
+  i :: x -> n
+  o :: y -> n
+  l :: e -> l'
+  s :: e -> n
+  t :: e -> n
+--}
+
+instance Category LCirc R (VI R) where
+  (.) (LCirc LGraph g :# Cospan c) (LCirc LGraph g' :# Cospan c') = LCirc LGraph (g <> g) :# Cospan c''
+    where
+      c'' = composeCospan c  c'
+
+
+  -- the id here is the zeroth node. We should have as id a perfectly conductive wire
+  id = (mkLCirc . mkGraph) perfectlyConductiveWire
+
+perfectlyConductiveWire :: Edge R (VI R)
+perfectlyConductiveWire = Edge (Node mkVI (0,0) :# Node mkVI (0, 0)) :# 0
+
+composeGraph (LGraph g) (LGraph g') =  g . g'
+
+copair :: (e -> l) -> (e' -> l) -> (e :# e') -> l
+copair i o = undefined
+
+-- coproducts
+
+coprod :: (e -> n) -> (e' -> n') -> (e :# e') -> (n :# n')
+coprod f f' (e :# e') = (f e :# f' e')
+
+sCoprod :: (e :# e') -> (n :# n')
+sCoprod = coprod s s'
+  where
+    s = source
+    s' = source
+
+tCoprod :: (e :# e') -> (n :# n')
+tCoprod = coprod t t'
+  where
+    t = target
+    t' = target
+
+--naturalMapFromCoproductToPushout :: (n :# n') -> ()
+
+composeLCirc (LCirc (LGraph g :# Cospan k x n y)) (LCirc (LGraph g' :# Cospan k' x' n' y')) = Circ (LGraph addToLGraph :# composeCospan)
+
+type LCircR = LCirc R (VI R)
+
+type LCircZ = LCirc Z (VI R)
+
+
+newtype Cospan k x n y = Cospan { runCospan :: (x `k` n, y `k` n) } deriving (Functor)
+
+composeCospan :: Cospan k x n y -> Cospan k x n y -> Cospan k x n y
+composeCospan (Cospan k x n y) (Cospan k' x' n' y') = Cospan (k . k') (x <> x') (n <> n') (y <> y')
+
+tensorCospans :: [Cospan k x n y] -> Cospan k x n y
+tensorCospans = undefined
+
+data a :. b = a :. b
+
+type Node' a b = Either a :. b Terminal
+
+data Terminal a = Input a | Output a
+
+type VICospan k = Cospan (:.) (Terminal VI R) (Terminal VI R) (Node' VI k)
+
+
+circToCospan :: LCirc l v -> Terminal VI -> Output VI -> VICospan
+circToCospan = undefined
+
 
 --newtype Additive a = Additive
 
@@ -157,7 +331,7 @@ mkCirc = Circ
 
 
 -- class CommutativeFrobeniusStructure x y where
---   ux :: 
+--   ux ::
 --   nx ::
 --   dx ::
 --   ex ::
@@ -172,7 +346,7 @@ mkCirc = Circ
 -- A boundary is specified by a terminal set
 type TerminalSet v = Set.Set (Node v)
 
-type NonTerminalSet a = Set.Set (Node v)
+type NonTerminalSet v = Set.Set (Node v)
 
 terminalNodes :: NodeSet v -> TerminalSet v
 terminalNodes = undefined
@@ -206,15 +380,18 @@ kcl nt s t = (sum s' - sum t') == 0
     s' = Set.map (\e-> (current . getNode) (s e)) nt
     t' = Set.map (\e-> (current . getNode) (t e)) nt
 
+
 -- The net inflow and outflow over a given set of terminal nodes is as follows
-boundaryCurrent :: (Num b, Fractional b, Ord b) => TerminalEdges a -> Source a -> Target a -> b
+boundaryCurrent :: (Num b, Fractional b, Ord b) => TerminalEdges l v -> Source v -> Target v -> v
 boundaryCurrent ts s t = sum t' - sum s'
   where
     s' = Set.map (\e-> (current . getNode) (s e)) ts
     t' = Set.map (\e-> (current . getNode) (t e)) ts
 
 
-extendedPowerFunctional :: (Fractional a, Ord a) => EdgeSet l (VI a) -> Power
+
+
+extendedPowerFunctional :: (Fractional a, Ord a) => EdgeSet l (VI a) -> a
 extendedPowerFunctional rs es = ((1/2) * (sum $ Set.map p' es))
   where
     p' e = ((edgeVoltage e)**2) / label e
@@ -222,21 +399,22 @@ extendedPowerFunctional rs es = ((1/2) * (sum $ Set.map p' es))
 powerFunctional :: (Num b, Fractional b) => TerminalSet a -> LabelMap (VI b) -> b
 powerFunctional terminalN rs = (Set.map (extendedPowerFunctional rs) (terminalEdges terminalN))
 
+-- We care a bunch about potential
 
 
-                                   
+
 -- Category Theoretic things
--- Decorated CoSpans
--- CoSpan Categories
+-- Decorated Cospans
+-- Cospan Categories
 -- Hypergraph Categories
--- Decorated CoSpan Categories
+-- Decorated Cospan Categories
 -- Open Circuits and their semantics
 -- Open Circuits
--- Dirichlet CoSpan Semantics
+-- Dirichlet Cospan Semantics
 -- Lagrangian Subspaces
 -- Lagrangian Relations
 -- Symplectification
--- Legrangian CoSpan Semantics
+-- Legrangian Cospan Semantics
 -- Black Box Functor
 -- Decoratated Corelations
 -- Corelation Categories
@@ -264,21 +442,21 @@ powerFunctional terminalN rs = (Set.map (extendedPowerFunctional rs) (terminalEd
 -- Circ -G-> FinCospan -H-> FinCorel
 
 -- G maps objects in Circ: Graph e v -> Cospan FinSet v
--- G maps the overlay morphism to 
--- H takes the objects in Graph v to 
+-- G maps the overlay morphism to
+-- H takes the objects in Graph v to
 
 
-k :: Node VI R -> Node VI R -> VI R
-k x y
+{--
+class Cospan x y n where
+  i' :: x -> n
+  o' :: y -> n
+--}
 
-class CoSpan x y n where
-  i :: x -> n
-  o :: y -> n
-
-
+-- semantic function
+-- blackbox = (finCospan :*: (\labelSet -> affineLagrangian . h . finCospan . labelSet))
 
 -----------------------------------------------------------------------
-type P = VI R
+
 
 type VINode = Node P
 
@@ -289,16 +467,16 @@ data LG = LG
   , edges :: EdgeSet ((VINode :# VINode) :# Label)
   }
 
-class LGraph e n where
-  s :: e -> n
-  t :: e -> n
+class LGraph' e n where
+  s' :: e -> n
+  t' :: e -> n
 
-
-class (CoSpan (Node n Node n Node n) LGraph e n) => LCirc e n where
+{--
+class (Cospan (Node n Node n Node n) LGraph e n) => LCirc' e n where
   inputs :: NodeSet n
   outputs :: NodeSet n
   terminals :: TerminalSet n
-
+--}
 
 mkNode :: Node (VI a)
 mkNode = Node mkVI (0, 0)
@@ -315,19 +493,19 @@ class FinRel k where
 -- The additive structure allows us to work with currents, because kcl.
   finRel :: k
 
-class (Field l, HasLAction l v) => Circ l v where
+-- class (Field l, HasLAction l v) => Circ l v where
   -- l are the edges and x the vi nodes.
   -- an L-action of a set L on an object x in a category C is a function a :: l -> homset (x, x)
   -- given two L-actions a :: l -> hom (x, x) and b :: l -> hom (y, y), a morphism of L-actions is a morphism
   --          f :: x -> y in C such that f . a $ l = (b l) . f for all l in L.
-  -- 
+  --
   -- co-product category of two props, one for special commutative Frobenius monoids and the second for L-actions
   -- has morphisms l :: L -> map (UnOp l) L
-  
+
 
 -- k is a lear relation R subset k^2n that it imposes between potentials and currents at its inputs and outputs
-  circ :: G.Graph l v
-  
+--  circ :: G.Graph l v
+
 --class (LCirc e n, FinRel k, Functor b) => BlackBox b c k where
 --  circuitToBehaviour :: c  -> k
 
@@ -350,14 +528,6 @@ It is possible to encode a category in haskell, but it doesn’t look exactly th
 
 --}
 
-class C k where
-  type Ok k :: Type -> Constraint
-  type Ok k = Yes1
-  id :: Ok k a => a `k` a
-  (.) :: forall b c a. Ok3 k a b c => (b `k` c) -> (a `k` b) -> (a `k` c)
-
-class Field r where
-  f :: r
 
 {--
 newtype Circ f a = Circ { runCirc :: G.Graph f VI } deriving (Eq, Ord, Show)
@@ -382,14 +552,15 @@ Blackbox is a transformation over props.
 - a definition for composition over CircL.
 - a Symplectic Vectorspace over k defined by an affine lagrangian relation.
 -- a label Field over a set of potential and current measurements
--- a Field of composition ordinarily impedence 
+-- a Field of composition ordinarily impedence
 
 
 --}
 
 
 
-blackbox = (finCospan :*: (\labelSet -> affineLagrangian . h . finCospan . labelSet))
+
   where
     affineLagrangian = undefined
+--}
 --}
