@@ -139,8 +139,8 @@ mkEdge :: Node v -> Node v -> l -> Edge l v
 mkEdge n n' l = Edge (EdgePair (abst (n, n')), l)
 
 
-zeroEdge :: (Pointed f, Num a1, Num a2) => p -> Edge (f a2) (VI a1)
-zeroEdge l = mkEdge zeroNode zeroNode zeroV
+zeroEdge :: (Pointed f, Num a1, Num a2) => Edge (f a2) (VI a1)
+zeroEdge = mkEdge zeroNode zeroNode zeroV
 
 oneEdge :: (Additive (f a1), Pointed f, Num a2, Num a1, Num (f a1)) => p -> Edge (f a1) (VI a2)
 oneEdge l = mkEdge zeroNode zeroNode (zeroV ^+^ 1)
@@ -182,9 +182,11 @@ instance (Num a) => Additive (VI a) where
 
 -------------------------------------------------------------------------------------------------------------------------}
 
-type NodeSet v = Set.Set (Node (VI v))
 
-type EdgeSet l v = Set.Set (Edge l v)
+newtype NodeSet v = NodeSet (Set.Set (Node (VI v))) deriving (Eq, Ord, Show)
+
+newtype EdgeSet l v = EdgeSet (Set.Set (Edge l v)) deriving (Eq, Ord, Show)
+
 
 type LabelMap l v = Map.Map (Edge l v) l
 
@@ -198,13 +200,23 @@ data LGraph l v = LGraph
 mkLGraph :: (Additive l, Num v) => NodeSet v -> EdgeSet l v -> LGraph l v
 mkLGraph = LGraph
 
+
+-- Basic Circuit Elements
 type Resistor = LGraph Z (VI Z)
 
 type Inductor = LGraph Z (VI Z)
 
 type Capacitor = LGraph Z (VI Z)
 
-cospan :: LGraph Z (VI Z) -> LGraph Z (VI Z) -> LGraph Z (VI Z)
+type VoltageSource = LGraph Z (VI Z)
+
+type CurrentSource = LGraph Z (VI Z)
+
+-- rules for 'Components!' -> m inputs and n outputs
+
+
+cospan :: LGraph () (VI Z) -> LGraph () (VI Z) -> LGraph Z (VI Z)
+cospan i o = undefined
 
 infix 0 :->
 infix 1 :<-
@@ -214,8 +226,11 @@ data x :<- o = x :<- o
 
 newtype Cospan i n o = Cospan (i :-> n :<- o)
 
-toCospan :: LGraph l v -> VI v -> VI v -> Cospan (VI v) (LGraph l v) (VI v)
-toCospan n i o = Cospan (i :-> n :<- o) 
+idEdgeSet :: EdgeSet l v
+idEdgeSet = EdgeSet Set.empty
+
+toCospan :: LGraph l v -> (NodeSet v) -> (NodeSet v) -> Cospan (LGraph () v) (LGraph l v) (LGraph () v)
+toCospan n i o = Cospan (LGraph {nodes=i, edges=idEdgeSet} :-> n :<- LGraph {nodes=o, edges=idEdgeSet}) 
 
 
 -- these represent maps into a finite set.
@@ -241,24 +256,41 @@ Thus the overall idea is that an L-circuit can be built from generating cospans 
 labelled edges
 --}
 
-type CospanL l v = Cospan (NodeSet v) (LGraph l v) (NodeSet v)
+type CospanL l v = Cospan (LGraph () v) (LGraph l v) (LGraph () v)
 
-newtype LCirc l v = LCirc (LGraph l v, CospanL l v)
+type FinCospan v = Cospan (LGraph () v) (LGraph () v) (LGraph () v)
+
+newtype LCirc l v = LCirc (Either (LGraph l v) (FinCospan v))
+
+conductiveEdge = LGraph {nodes=n [0, 1], edges=e ((0, 1)) 0}
+  where
+    n :: (Num b, Ord b) => [(VI b)] -> NodeSet b
+    n a = NodeSet (Set.fromList (map mkNode a))
+    e :: (Num b, Ord b, Ord l) => (Node (VI b), Node (VI b)) -> l -> EdgeSet l (Node (VI b))
+    e (n, n') l = EdgeSet (Set.fromList [mkEdge (mkNode n) (mkNode n') l])
+
+instance Category LCirc where
+  id = conductiveEdge
+  (.) = composeLCirc
 
 collapse :: LGraph l v -> NodeSet v
 collapse (LGraph { nodes }) = nodes
 
+
+
+
+coprod :: CospanL l v -> CospanL l v -> CospanL l v
 coprod (Cospan c@(LGraph { nodes=i } :-> LGraph { nodes=x, edges=e } :<- LGraph { nodes=o } ))
-  (Cospan c'@(LGraph { nodes=i' } :-> LGraph { nodes=x', edges=e' } :<- LGraph { nodes=o' } )) = Cospan (LGraph {nodes=i, edges=Set.empty} :-> LGraph {nodes= o +++ i', edges=e +++ e'} :<- LGraph {nodes=o', edges=Set.empty})
+  (Cospan c'@(LGraph { nodes=i' } :-> LGraph { nodes=x', edges=e' } :<- LGraph { nodes=o' } )) = Cospan (LGraph {nodes=i, edges=Set.empty} :-> LGraph {nodes=(Set.disjointUnion o i'), edges=(EdgeSet (Set.disjointUnion e e'))} :<- LGraph {nodes=o', edges=Set.empty})
 
 inputs :: LCirc l v -> NodeSet v
-inputs (LCirc (_, (Cospan (i :-> _ :<- _)))) = i
+inputs (LCirc (_, (Cospan (LGraph{ nodes=i} :-> _ :<- _)))) = i
 
 outputs :: LCirc l v -> NodeSet v
-outputs (LCirc (_, (Cospan (_ :-> _ :<- o)))) = o
+outputs (LCirc (_, (Cospan (_ :-> _ :<- LGraph{ nodes=o})))) = o
 
 terminals :: (Ord v, Num v) => LCirc l v -> Set.Set (Node (VI v))
-terminals (LCirc (_, (Cospan (i :-> _ :<- o)))) = Set.union i o
+terminals (LCirc (_, (Cospan (i :-> _ :<- o)))) = Set.union (nodes i) (nodes o)
 
 composeLCirc :: (Ord v, Ord l, Num v, Num l) => LCirc l v -> LCirc l v -> LCirc l v
 composeLCirc (LCirc (lg@LGraph{ nodes = n0, edges = e0},
