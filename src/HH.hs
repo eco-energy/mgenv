@@ -13,12 +13,29 @@ module HH
   , hhStep
   ) where
 
+import qualified Data.Time as Time
+import qualified Data.Time.Clock.POSIX as Time
+
+-- work with the functions available through C as if you have Category Instances.
+import qualified ConCat.CircAff as C
 
 import GHC.Generics (Generic)
 
 import Control.Monad.State
 
 import Control.Monad.Bayes.Class
+
+
+-- In this universe, there is no State.
+-- There is a category of l-graph cospans that compose if the start or end of a circuit meets another.
+-- we have id and (.).
+-- We also have swap from braided, a monoidal sum and product.
+-- But when do the cospans compose?
+-- We have to express a high-level circuit in a formal semantic that is concise and as flexible as drawing squiggly lines on paper.
+-- Obviously it has to be completely declarative and tersely functional at the same time.
+--
+-- The battery has a hysterises voltage.
+-- 
 import Physics.Storage
   ( sampleBatterySpec
   , BatteryState
@@ -36,7 +53,8 @@ import Physics.Generation
   
 import Physics.Transmission
   ( TransmissionState
-  , initTransmissionState)
+  , initTransmissionState
+  )
 
 import Physics.Units
   ( unZonedTime
@@ -89,7 +107,25 @@ sampleHH n loc grloc = do
   consump <- sampleConsumptionSpec
   return $ HHSpec n loc grloc storage gen consump
 
+
+data Audit = Audit
+  { transmittedIn :: Watts
+  , transmittedOut :: Watts
+  , consumed :: Watts
+  , generated :: Watts
+  , tDiff :: Time.DiffTime
+  } deriving (Eq, Show, Ord, Generic)
+
+
+data Transaction = Transaction
+  { start :: Time.UTCTime,
+    duration   :: Time.DiffTime,
+    edges :: [C.Edge Double (NodeId, C.VI Double)]
+  } deriving (Eq, Ord, Show)
+
+
 data Transmission = Transmission Watts Amp
+
 
 hhStep' :: (MonadSample m) => HHSpec -> DelT -> ZonedTime -> MetersPerSecond -> Temperature -> Transmission -> StateT HHState m Reward
 hhStep' HHSpec {..} delT time windSpeed ambientTemp transmission = do

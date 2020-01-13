@@ -55,6 +55,9 @@ dependencies:
 - bytestring
 - QuickCheck
 - vector-space
+- checkers
+- pointed
+- hspec
 
 ghc-options:
 - -Wall
@@ -89,6 +92,7 @@ tests:
     - mgenv
     - hspec
     - QuickCheck
+    - checkers
 
     ghc-options:
     - -threaded
