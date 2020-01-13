@@ -1,6 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeOperators #-}
 
+module ConCat.Hypergraph where
 
 import ConCat.Isomorphism
 import ConCat.AltCat
