@@ -29,8 +29,11 @@ import ConCat.Category
 import ConCat.Additive
 import ConCat.Pair
 import ConCat.Rep (HasRep(..))
+import ConCat.Circuit
+import ConCat.Free.Affine
 
 import Data.Pointed
+import Control.Monad.Representable.State
 
 -- Context
 -- Network Diagrams of various systems have analogies.
@@ -45,10 +48,13 @@ import Data.Pointed
 
 type R = Double
 type S = [R]
-type Z = (R, R, R) -- impedance as an RLC tuple
+newtype Z' a = Z' (a, a, a) -- impedance as an RLC tuple
+
+type Z = Z' R
 type Voltage = Double
 type Current = Double
 
+deriving instance Pointed Z'
 
 newtype VI a = VI { unVI :: Pair a } deriving (Show, Functor, Generic)
 
@@ -121,11 +127,16 @@ newtype Edge l v = Edge { getEdge :: (EdgePair (Node v), l) } deriving (Eq, Ord,
 
 deriving instance Pointed (Edge l)
 
-type Source l v = Edge l v -> Node v
+type Source' l v = Edge l v -> Node v
 
 type Target l v = Edge l v -> Node v
 
-source :: Source l v
+type VIEdge a = Edge (VI a) a
+
+zeroEdge' :: (Num a) => VI a -> VI a -> VIEdge a
+zeroEdge' from to = undefined -- (mkEdge (mkNode from) (mkNode to) 0
+
+source :: Source' l v
 source = fst' . nodePair . fst . getEdge
 
 target :: Target l v
@@ -139,8 +150,8 @@ mkEdge :: Node v -> Node v -> l -> Edge l v
 mkEdge n n' l = Edge (EdgePair (abst (n, n')), l)
 
 
-zeroEdge :: (Pointed f, Num a1, Num a2) => Edge (f a2) (VI a1)
-zeroEdge = mkEdge zeroNode zeroNode zeroV
+zeroEdge :: (Pointed p, Num l, Num vi) => Edge (p l) (VI vi)
+zeroEdge = mkEdge zeroNode zeroNode $ zeroV
 
 oneEdge :: (Additive (f a1), Pointed f, Num a2, Num a1, Num (f a1)) => p -> Edge (f a1) (VI a2)
 oneEdge l = mkEdge zeroNode zeroNode (zeroV ^+^ 1)
@@ -159,10 +170,34 @@ impedance :: Edge Z (VI a) -> Z
 impedance = label
 
 data RLC a where
+  -- explore type indexed list representation
   Resistor :: a -> RLC a
   Inductor :: a -> RLC a
   Capacitor :: a -> RLC a
 
+data E = Res | Ind | Cap deriving (Eq, Ord, Show)
+
+--type R = Double
+--type S = (Double, Double, D)
+
+--rlc :: (Num a) => a -> E -> RLC a
+rlc p Res = Resistor p
+rlc p Ind = Inductor p
+rlc p Cap = Capacitor p
+
+unRLC :: RLC a -> a
+unRLC (Resistor a) = a
+unRLC (Inductor a) = a
+unRLC (Capacitor a) = a
+
+--instance HasRep (RLC a) where
+
+toRLC ps es = fmap rlc $ map (,) $ zip ps es
+
+--instance (Num a) => HasV a (RLC a) where
+--  toV = unRLC
+--  unV = rlc
+  
 
 instance (Num a) => HasV a (VI a) where
   -- toV :: a -> V s a s
@@ -175,7 +210,6 @@ instance (Num a) => Additive (VI a) where
   (VI (v :# i)) ^+^ (VI (v' :# i')) = (VI ((v + v') :# (i + i')))
 
 
-
 {------------------------------------------------------------------------------------------------------------------------
 
                               LGraphs and Their Cospans
@@ -183,12 +217,18 @@ instance (Num a) => Additive (VI a) where
 -------------------------------------------------------------------------------------------------------------------------}
 
 
-newtype NodeSet v = NodeSet (Set.Set (Node (VI v))) deriving (Eq, Ord, Show)
+newtype NodeSet v = NodeSet (Set.Set (Node (VI v))) deriving (Eq, Ord, Show, Generic)
 
-newtype EdgeSet l v = EdgeSet (Set.Set (Edge l v)) deriving (Eq, Ord, Show)
+nodeSet = NodeSet
 
+newtype EdgeSet l v = EdgeSet (Set.Set (Edge l v)) deriving (Eq, Ord, Show, Generic)
+
+edgeSet = EdgeSet
 
 type LabelMap l v = Map.Map (Edge l v) l
+
+
+type VINode a = Node (VI a)
 
 -- An LGraph is a product of N : ID -> a and E : (ID, ID) -> l
 
@@ -204,6 +244,11 @@ mkLGraph = LGraph
 -- Basic Circuit Elements
 type Resistor = LGraph Z (VI Z)
 
+{--
+unitR :: Node (VI a) -> (Node  (VI a)) State m Resistor
+unitR = mkLGraph (source zeroEdge,  target zeroEdge)
+  zeroEdge
+--}
 type Inductor = LGraph Z (VI Z)
 
 type Capacitor = LGraph Z (VI Z)
@@ -213,8 +258,6 @@ type VoltageSource = LGraph Z (VI Z)
 type CurrentSource = LGraph Z (VI Z)
 
 -- rules for 'Components!' -> m inputs and n outputs
-
-
 cospan :: LGraph () (VI Z) -> LGraph () (VI Z) -> LGraph Z (VI Z)
 cospan i o = undefined
 
@@ -260,8 +303,11 @@ type CospanL l v = Cospan (LGraph () v) (LGraph l v) (LGraph () v)
 
 type FinCospan v = Cospan (LGraph () v) (LGraph () v) (LGraph () v)
 
-newtype LCirc l v = LCirc (Either (LGraph l v) (FinCospan v))
+data a :-- b = a :-- b
 
+newtype LCirc l v = LCirc ((LGraph l v),  (FinCospan v))
+
+{--
 conductiveEdge = LGraph {nodes=n [0, 1], edges=e ((0, 1)) 0}
   where
     n :: (Num b, Ord b) => [(VI b)] -> NodeSet b
@@ -272,16 +318,26 @@ conductiveEdge = LGraph {nodes=n [0, 1], edges=e ((0, 1)) 0}
 instance Category LCirc where
   id = conductiveEdge
   (.) = composeLCirc
+--}
 
 collapse :: LGraph l v -> NodeSet v
 collapse (LGraph { nodes }) = nodes
 
+--coprod :: CospanL l v -> CospanL l v -> CospanL l v
+coprod :: (Num v, Ord v, Ord l) => Cospan (LGraph l v) (LGraph l v) (LGraph l v) -> Cospan (LGraph l v) (LGraph l v) (LGraph l v) -> Cospan (LGraph l v) (LGraph l v) (LGraph l v)
+coprod (Cospan c@(LGraph { nodes=NodeSet i } :-> LGraph { nodes=NodeSet x, edges=EdgeSet e } :<- LGraph { nodes=NodeSet o } ))
+  (Cospan c'@(LGraph { nodes=NodeSet i' } :-> LGraph { nodes=NodeSet x', edges= EdgeSet e' } :<- LGraph { nodes=NodeSet o' } )) = Cospan (LGraph {nodes= NodeSet (Set.union i i'), edges=idEdgeSet} :-> LGraph {nodes=(NodeSet (Set.union x x')), edges=(EdgeSet (Set.union e e'))} :<- LGraph {nodes=NodeSet (Set.union o o'), edges=idEdgeSet})
 
 
+comp (Cospan c@(LGraph { nodes=i } :-> LGraph { nodes=NodeSet x, edges=EdgeSet e } :<- LGraph { nodes=NodeSet o } ))
+  (Cospan c'@(LGraph { nodes=NodeSet i' } :-> LGraph { nodes=NodeSet x', edges= EdgeSet e' } :<- LGraph { nodes= o' } )) = Cospan (LGraph {nodes=i, edges=idEdgeSet} :-> LGraph {nodes=(NodeSet (pushout x x' i')), edges=(EdgeSet (Set.union e e'))} :<- LGraph {nodes=o', edges=idEdgeSet})
+  where
+    pushout :: Set.Set a -> Set.Set a -> Set.Set a -> Set.Set a
+    pushout a b i = identify (Set.disjointUnion a b) i
+      where
+        identify :: Set.Set (Either a a) -> Set.Set a -> Set.Set a
+        identify = undefined
 
-coprod :: CospanL l v -> CospanL l v -> CospanL l v
-coprod (Cospan c@(LGraph { nodes=i } :-> LGraph { nodes=x, edges=e } :<- LGraph { nodes=o } ))
-  (Cospan c'@(LGraph { nodes=i' } :-> LGraph { nodes=x', edges=e' } :<- LGraph { nodes=o' } )) = Cospan (LGraph {nodes=i, edges=Set.empty} :-> LGraph {nodes=(Set.disjointUnion o i'), edges=(EdgeSet (Set.disjointUnion e e'))} :<- LGraph {nodes=o', edges=Set.empty})
 
 inputs :: LCirc l v -> NodeSet v
 inputs (LCirc (_, (Cospan (LGraph{ nodes=i} :-> _ :<- _)))) = i
@@ -289,11 +345,13 @@ inputs (LCirc (_, (Cospan (LGraph{ nodes=i} :-> _ :<- _)))) = i
 outputs :: LCirc l v -> NodeSet v
 outputs (LCirc (_, (Cospan (_ :-> _ :<- LGraph{ nodes=o})))) = o
 
-terminals :: (Ord v, Num v) => LCirc l v -> Set.Set (Node (VI v))
-terminals (LCirc (_, (Cospan (i :-> _ :<- o)))) = Set.union (nodes i) (nodes o)
+terminals :: (Ord v, Num v) => LCirc l v -> NodeSet v
+terminals (LCirc (_, (Cospan (LGraph {nodes=NodeSet i} :-> _ :<- LGraph{nodes=NodeSet o})))) = NodeSet (Set.union i o)
 
-composeLCirc :: (Ord v, Ord l, Num v, Num l) => LCirc l v -> LCirc l v -> LCirc l v
-composeLCirc (LCirc (lg@LGraph{ nodes = n0, edges = e0},
+--composeLCirc :: (Ord v, Ord l, Num v, Num l) => LCirc l v -> LCirc l v -> LCirc l v
+--composeLCirc = comp
+
+{--(LCirc (lg@LGraph{ nodes = n0, edges = e0},
                      Cospan (i :-> n :<- o))) (LCirc (lg' @ LGraph{ nodes = n0', edges = e0'},
                                                       Cospan (i' :-> n' :<- o'))) = LCirc (lgraph'', cospan'')
   where
@@ -302,6 +360,7 @@ composeLCirc (LCirc (lg@LGraph{ nodes = n0, edges = e0},
     f = undefined
     f' = undefined
     n'' = undefined
+--}
 
 --unitLGraph = zeroEdge
 

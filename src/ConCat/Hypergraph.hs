@@ -13,7 +13,7 @@ import qualified Data.Set as Set
 import qualified Data.Map as Map
 
 
-import ConCat.CircAff hiding (Cospan)
+import ConCat.CircAff hiding (Cospan, S, T)
 
 -- An implementation of Hypergraph categories.
 
@@ -45,7 +45,7 @@ class (BraidedPCat a, MonoidalPCat a, MonoidalSCat a, BraidedSCat a, CoproductCa
 data C = Light | Switch | Battery deriving (Eq, Ord, Show)
 
 newtype Apex a = Apex { runApex :: a } deriving (Eq, Ord, Show)
-
+{--
 -- cospans should have types distinct in the magnitude of sets i x and o
 newtype Cospan i x o = Cospan (i :> Apex x :< o)
 
@@ -53,7 +53,7 @@ newtype Cospan i x o = Cospan (i :> Apex x :< o)
 mkCospan :: x -> Map.Map i x -> Map.Map o x -> Cospan i x o
 mkCospan x i o = Cospan (i :> x :< o)
 
-newtype VIs a = VIs { runVIs :: LCircSet }
+newtype VIs a = VIs { runVIs :: a }
 
 -- monoidal product in cospan
 mprod :: Cospan i x o -> Cospan i' x' o' -> Cospan i'' x'' o''
@@ -64,14 +64,4 @@ mprod a b = mkCospan
 
 blackbox (VIs a :> LGraph lg :< VIs a') = undefined
 
-
-type L = L
-
-type LCircSet c l = Set.Set (C, L)
-
-type S = LCircSet -> Node
-
-type T = LCircSet -> Node
-
-type Graph = (LCircSet, S, T)
-
+--}
