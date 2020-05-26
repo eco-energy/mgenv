@@ -1,7 +1,13 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveGeneric #-}
-module Physics.Transmission (TransmissionSpec, TransmissionState, initTransmissionState, sampleTransmissionSpec, runTransmission) where
+module Physics.Transmission
+  ( TransmissionSpec(..)
+  , TransmissionState(..)
+  , initTransmissionState
+  , sampleTransmissionSpec
+  , runTransmission
+  ) where
 
 import Physics.Units
 import GHC.Generics (Generic)

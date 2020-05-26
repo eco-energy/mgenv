@@ -6,7 +6,11 @@ module Physics.Consumption
   , sampleConsumptionSpec
   , ConsumptionState
   , initConsumptionState
-  , runConsumption) where
+  , initConsumptionStateM
+  , runConsumption
+  , Load(..)
+  , LoadState(..)
+  ) where
 
 import Physics.Units
 import GHC.Generics (Generic)
@@ -43,12 +47,15 @@ sampleConsumptionSpec = do
 runLoad :: Load -> V -> Amp
 runLoad Load {..} batteryV = power / batteryV
 
-initConsumptionState :: (MonadSample m) => ConsumptionSpec -> m ConsumptionState
-initConsumptionState (ConsumptionSpec loads) = do
+initConsumptionStateM :: (MonadSample m) => ConsumptionSpec -> m ConsumptionState
+initConsumptionStateM (ConsumptionSpec loads) = do
   let
     hot Load {utility} = bernoulli utility
   states <- mapM hot loads
   return $ ConsumptionState (map (\(l, s)-> LoadState l s) $ zip loads states) 
+
+initConsumptionState :: ConsumptionSpec -> ConsumptionState
+initConsumptionState (ConsumptionSpec loads) = ConsumptionState ((\l -> LoadState l False) <$> loads)
 
 
 runConsumption :: (MonadSample m) => ConsumptionState -> m (ConsumptionState, Watts)

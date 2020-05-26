@@ -6,9 +6,6 @@
 packages:
 - completed:
     subdir: inline
-    cabal-file:
-      size: 815
-      sha256: d5d57292bfce1359b27af708ad985b12b777a85fdd8b4fd2325e4d4fa30b0009
     name: concat-inline
     version: 0.1.0.0
     git: https://github.com/conal/concat.git
@@ -22,9 +19,6 @@ packages:
     commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
 - completed:
     subdir: known
-    cabal-file:
-      size: 745
-      sha256: 178fc68696d689967156e319fd086dfaaad0b0ef71414603e019b80228775aac
     name: concat-known
     version: 0.1.0.0
     git: https://github.com/conal/concat.git
@@ -38,9 +32,6 @@ packages:
     commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
 - completed:
     subdir: satisfy
-    cabal-file:
-      size: 941
-      sha256: 756cb8966beb6970cf86b6b07814f0c2009000b4b0f90504c7ae7b10d8b70176
     name: concat-satisfy
     version: 0.1.0.0
     git: https://github.com/conal/concat.git
@@ -54,9 +45,6 @@ packages:
     commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
 - completed:
     subdir: classes
-    cabal-file:
-      size: 1941
-      sha256: ba8ef15660f3b4ce2d8b7bb9f69dea7ba1bf1596ee2956ab8739d43768ee35dd
     name: concat-classes
     version: 0.3.0.0
     git: https://github.com/conal/concat.git
@@ -70,9 +58,6 @@ packages:
     commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
 - completed:
     subdir: plugin
-    cabal-file:
-      size: 1498
-      sha256: fea0807ab4d665399239f22f7e46ee33121db53be27b698afc9a31aac6c59e25
     name: concat-plugin
     version: 0.3.0.0
     git: https://github.com/conal/concat.git
@@ -86,9 +71,6 @@ packages:
     commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
 - completed:
     subdir: examples
-    cabal-file:
-      size: 8686
-      sha256: e10acfb864b2d2c7f618fb4d38dbfa45ac67e199c6cc8d8c6556cd3bf4f80231
     name: concat-examples
     version: 0.3.0.0
     git: https://github.com/conal/concat.git
@@ -102,9 +84,6 @@ packages:
     commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
 - completed:
     subdir: graphics
-    cabal-file:
-      size: 2620
-      sha256: e02fce6b5e428dfe9590d4ae51c7cfaa8165f528ec19baea384d8fce58b7bb0c
     name: concat-graphics
     version: 0.1.0.0
     git: https://github.com/conal/concat.git
@@ -118,9 +97,6 @@ packages:
     commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
 - completed:
     subdir: hardware
-    cabal-file:
-      size: 3232
-      sha256: a61725d5c442c4999193b1dfcca02087b195b1c482962edaaf2cf30c67ff8679
     name: concat-hardware
     version: 0.1.0.0
     git: https://github.com/conal/concat.git
@@ -134,9 +110,6 @@ packages:
     commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
 - completed:
     subdir: .
-    cabal-file:
-      size: 9263
-      sha256: 758401e0508351e67778975742b32162c046d4bc6895d88c9389d879c0afc7f4
     name: monad-bayes
     version: 0.1.0.0
     git: https://github.com/eco-energy/monad-bayes.git
@@ -148,22 +121,6 @@ packages:
     subdir: .
     git: https://github.com/eco-energy/monad-bayes.git
     commit: 8078cced02401f4c58f5fb15da6be8b71eb246ba
-- completed:
-    subdir: .
-    cabal-file:
-      size: 1541
-      sha256: 76c4a00df281f099ed8ae70877f72d35202197b9d200b838d8f87e1e7b3769b7
-    name: elminator
-    version: 0.2.4.1
-    git: https://github.com/sras/elminator.git
-    pantry-tree:
-      size: 917
-      sha256: c13b5bdd79dddac72b1977bd14d8e5e5f90cf8635a562d8e1829faa4e7a5d9ff
-    commit: c33566b6714a757b93f60e6bd8a6866c7ffc33b2
-  original:
-    subdir: .
-    git: https://github.com/sras/elminator.git
-    commit: c33566b6714a757b93f60e6bd8a6866c7ffc33b2
 - completed:
     hackage: geodetics-0.1.0@sha256:699c10cd8d69222b125d054cdc8e2bcee7cb0558c78fa1b4fa06b2d3ecf29f5c,2387
     pantry-tree:
@@ -187,7 +144,7 @@ packages:
     hackage: hgeometry-combinatorial-0.9.0.0@sha256:a03b48302d8c542ff2ff90ba5d45f2742cc21ed1a676c8fa4870cd461a273354,7367
 snapshots:
 - completed:
-    size: 524130
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/14/10.yaml
-    sha256: 04841e0397d7ce6364f19359fce89aa45ca8684609d665845db80d398002baa9
-  original: lts-14.10
+    size: 524799
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/14/17.yaml
+    sha256: 1d72b33c0fc048e23f4f18fd76a6ad79dd1d8a3c054644098a71a09855e40c7c
+  original: lts-14.17

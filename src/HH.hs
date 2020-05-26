@@ -6,15 +6,14 @@
 {-# LANGUAGE ConstraintKinds #-}
 module HH
   ( sampleHH
-  , HHSpec
-  , gridLoc
+  , HHSpec(..)
   , NodeId
-  , HHState
+  , HHState(..)
   , hhStep
+  , initHHState
   ) where
 
 import qualified Data.Time as Time
-import qualified Data.Time.Clock.POSIX as Time
 
 -- work with the functions available through C as if you have Category Instances.
 import qualified ConCat.CircAff as C
@@ -37,7 +36,7 @@ import Control.Monad.Bayes.Class
 -- The battery has a hysterises voltage.
 -- 
 import Physics.Storage
-  ( sampleBatterySpec
+  (initBatteryState,  sampleBatterySpec
   , BatteryState
   , BatterySpec
   , batteryVoltage
@@ -51,10 +50,6 @@ import Physics.Generation
   , GenSpec
   )
   
-import Physics.Transmission
-  ( TransmissionState
-  , initTransmissionState
-  )
 
 import Physics.Units
   ( unZonedTime
@@ -85,7 +80,11 @@ type NodeId = Int
 
 type Reward = R
 
-type HHState = (BatteryState, ConsumptionState)
+newtype HHState = HHState (BatteryState, ConsumptionState) deriving (Eq, Ord, Show, Generic)
+
+
+initHHState :: ConsumptionSpec -> (BatteryState, ConsumptionState)
+initHHState cs = (initBatteryState, initConsumptionState cs)
 
 data HHSpec = HHSpec
   { nId :: NodeId
@@ -129,7 +128,7 @@ data Transmission = Transmission Watts Amp
 
 hhStep' :: (MonadSample m) => HHSpec -> DelT -> ZonedTime -> MetersPerSecond -> Temperature -> Transmission -> StateT HHState m Reward
 hhStep' HHSpec {..} delT time windSpeed ambientTemp transmission = do
-  (bs, cs) <- get
+  (HHState (bs, cs)) <- get
   (cs', consumed) <- runConsumption cs
   let
     (Transmission _ tc) = transmission
@@ -140,7 +139,7 @@ hhStep' HHSpec {..} delT time windSpeed ambientTemp transmission = do
     batteryCurrent = tc + generationCurrent + consumptionCurrent
     bs' = stateNext storage bs batteryCurrent delT 
     reward = (energyStored bs') + consumed
-  put (bs', cs')
+  put (HHState (bs', cs'))
   return reward
 
 hhStep :: (MonadSample m) => HHSpec -> (DelT -> ZonedTime -> MetersPerSecond -> Temperature -> Transmission -> StateT HHState m Reward)

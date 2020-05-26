@@ -73,7 +73,6 @@ getGridSpec = undefined
 runEnv startDate centerPoint = do
   gridSpec <- sampleGridSpec
   grid <- generateGrid gridSpec
-  let
-    initState = initGridState gridSpec
+  let initState = initGridState grid
   --S.scanl' gridStep initState (initWorldTime startDate) 
   return ()

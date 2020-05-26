@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -11,11 +10,10 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE RecordWildCards #-}
 
 
-module Grid (builder, GridState, SampledGrid, sampleGridSpec, generateGrid, initWorldTime, initGridState, gridStep) where
+module Grid (GridState(..), SampledGrid(..), GridSpec(..), sampleGridSpec, generateGrid, initWorldTime, initGridState, gridStep) where
 
 import Control.Monad.Bayes.Class
 import Control.Monad (replicateM)
@@ -28,7 +26,7 @@ import Physics.Units (GeoC, R, Meters, EuclideanC, Theta, Watts, location, rever
 
 
 import Data.Time (addDays, diffDays, UTCTime, utcToZonedTime, NominalDiffTime, addUTCTime, zonedTimeToUTC, fromGregorian)
-import HH (sampleHH, HHSpec, gridLoc, NodeId, HHState, hhStep)
+import HH (initHHState, HHSpec(..), sampleHH, NodeId, HHState(..), hhStep)
 import Physics.Transmission
 import qualified Data.List.NonEmpty as NE
 
@@ -36,13 +34,11 @@ import Geometry.EMST (minSpanTreeEdges, positiveGridPoints)
 import Algebra.Graph.Labelled
 import qualified Data.Map as Map
 
-import Elminator
 import Data.Proxy
 
 import Streamly
 import qualified Streamly.Prelude as S
 
-import qualified Elminator as E
 import Data.Bifunctor
 
 {-
@@ -63,7 +59,7 @@ type Reward = R
 
 newtype Grid e n = Grid
   { unGrid :: Graph e n
-  } deriving (Eq, Show, Generic, Functor, Applicative, E.ToHType)
+  } deriving (Eq, Show, Generic, Functor)
 
 --type StateGrid = Grid Edge Node
 
@@ -84,12 +80,7 @@ initWorldTime initTime = S.iterate tn initTime
 
 gridStep :: StateGrid -> ControlGrid -> StateGrid
 gridStep grid control = undefined
-{--
-bimap et ht grid
-  where
-    et = undefined
-    ht = hhStep 
---}
+
 
 gridReward :: StateGrid -> Reward
 gridReward g = undefined
@@ -103,12 +94,10 @@ data GridSpec = GridSpec
   } deriving (Eq, Show, Generic)
 
 
-newtype SampledGrid = SampledGrid (Graph TransmissionSpec HHSpec) deriving (Eq, Show, Generic, E.ToHType)
+newtype SampledGrid = SampledGrid (Graph TransmissionSpec HHSpec) deriving (Eq, Show, Generic)
 
-newtype GridState = GridState (Graph TransmissionState HHState) deriving (Show, Generic, E.ToHType)
+newtype GridState = GridState (Graph TransmissionState HHState) deriving (Show, Generic)
 
-initGridState :: GridSpec -> GridState
-initGridState gs = undefined
 
 data Node = Node
   { node :: NodeId
@@ -136,6 +125,8 @@ sampleGridSpec = do
   let st = fromUTC $ dateStartToUTC t'
   return $ GridSpec st cp nNodes nodeDistanceMean nodeDistanceStd
 
+initGridState :: SampledGrid -> GridState
+initGridState (SampledGrid gs) = GridState $ bimap (\_ -> initTransmissionState) (\HHSpec{..} -> HHState $ initHHState consumption) gs
 
 toHH :: (MonadSample m) => Node -> m HHSpec
 toHH (Node{node, geoCoords, coords}) = sampleHH node geoCoords coords
@@ -150,20 +141,20 @@ generateGrid GridSpec {..} = do
   nodeDistances <- replicateM nNodes $ normal nodeDistanceMean nodeDistanceStd
   nodeAngles <- replicateM nNodes $ uniform 0 360
   let
-    (nodeDict, edges) = localAndGlobalLoc centerPoint nodeDistances nodeAngles
+    (nodeDict, tedges) = localAndGlobalLoc centerPoint nodeDistances nodeAngles
     edgeLoc :: Edge -> (Node, Node)
     edgeLoc (x, y) = ((nodeDict Map.! x), (nodeDict Map.! y))
-  graphs <- mapM (uncurry sampleEdge) $ map edgeLoc edges
+  graphs <- mapM (uncurry sampleEdge) $ map edgeLoc tedges
   return $ mkSampledGrid $ overlays graphs
 
 
 localAndGlobalLoc :: GeoC -> [Meters] -> [Theta] -> (NodeDict, [Edge])
-localAndGlobalLoc centerPoint nodeDistances nodeAngles = (nodeDict, edges)
+localAndGlobalLoc centerPoint nodeDistances nodeAngles = (nodeDict, tedges)
   where
     geoCs = map (uncurry (atDistanceAndAngle centerPoint)) $ zip nodeDistances nodeAngles
     enumCs = zip [(0::NodeId)..] $ positiveGridPoints $ zip nodeDistances nodeAngles
-    edges :: [(NodeId, NodeId)]
-    edges = minSpanTreeEdges $ NE.fromList enumCs
+    tedges :: [(NodeId, NodeId)]
+    tedges = minSpanTreeEdges $ NE.fromList enumCs
     nodes :: [Node]
     nodes = map (\(g, (i,c))-> Node i c g) $ zip geoCs enumCs
     nodeDict = Map.fromList $ zip (map node nodes) nodes
@@ -182,9 +173,3 @@ sampleEdge loc1 loc2 = do
   h2 <- toHH loc2
   return $ edge tspec h1 h2
 
-
-
-builder :: Builder
-builder = do
-  include (Proxy :: Proxy GridState) $ Everything Mono
-  include (Proxy :: Proxy SampledGrid) $ Everything Mono

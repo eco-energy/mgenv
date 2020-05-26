@@ -17,7 +17,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: lts-14.10
+resolver: lts-14.17
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -50,10 +50,6 @@ extra-deps:
     commit: 8078cced02401f4c58f5fb15da6be8b71eb246ba
     subdirs:
       - .
-  - git: https://github.com/sras/elminator.git
-    commit: c33566b6714a757b93f60e6bd8a6866c7ffc33b2
-    subdirs:
-      - .
   - geodetics-0.1.0@sha256:699c10cd8d69222b125d054cdc8e2bcee7cb0558c78fa1b4fa06b2d3ecf29f5c,2387
   - hgeometry-0.9.0.0@sha256:43043574d2ce39c543dfadb629ab3a41fe65d7bf68a1426d8d01312818bc6e4e,9702
   - hgeometry-combinatorial-0.9.0.0@sha256:a03b48302d8c542ff2ff90ba5d45f2742cc21ed1a676c8fa4870cd461a273354,7367
@@ -84,6 +80,3 @@ extra-deps:
 #
 # Allow a newer minor version of GHC than the snapshot specifies
 # compiler-check: newer-minor
-
-docker:
-  enable: true

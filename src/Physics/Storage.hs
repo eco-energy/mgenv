@@ -2,13 +2,13 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DataKinds #-}
-module Physics.Storage (BatteryState, BatterySpec, sampleBatterySpec, stateNext, initBatteryState, batteryVoltage, Storage, energyStored) where
+module Physics.Storage (BatteryState(..), BatterySpec(..), sampleBatterySpec, stateNext, initBatteryState, batteryVoltage, Storage, energyStored) where
 
 import Data.Tuple.Extra ()
 import GHC.Generics hiding (R)
 import Physics.Units
 import Control.Monad.Bayes.Class
-import Control.Monad (replicateM, liftM, liftM2)
+import Control.Monad (liftM)
 
 {--
 In terms of the environment design, what the RL controller should see
@@ -60,7 +60,7 @@ data BatteryState = BatteryState
   , e_t :: WattHours
   , cp_t :: Watts
   , dp_t :: Watts
-  } deriving (Eq, Show, Generic)
+  } deriving (Eq, Ord, Show, Generic)
 
 
 data BatterySpec = BatterySpec
@@ -175,6 +175,7 @@ mkBattery = Battery defaultParameters initBatteryState defaultObs
 batterySpec :: Eff -> AmpH -> AmpH -> AmpH -> V -> V -> V -> V -> Amp -> V -> Amp -> BatterySpec
 batterySpec = BatterySpec
 
+toEff :: ChargeEfficiency -> DischargeEfficiency -> Eff
 toEff c d = (c, d) :: Eff
 
 batteryState :: V -> SoC -> WattHours -> Watts -> Watts -> BatteryState

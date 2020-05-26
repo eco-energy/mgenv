@@ -27,7 +27,6 @@ dependencies:
 - time
 - astro
 - extra
-- elm-bridge
 - aeson
 - MemoTrie
 - parallel
@@ -44,7 +43,6 @@ dependencies:
 - concat-examples
 - concat-plugin
 - text
-- elminator
 - adjunctions
 - distributive
 - warp
@@ -58,7 +56,12 @@ dependencies:
 - checkers
 - pointed
 - hspec
-
+- diagrams
+- diagrams-core
+- diagrams-lib
+- diagrams-contrib
+- diagrams-svg
+- keys
 ghc-options:
 - -Wall
 - -Wcompat
