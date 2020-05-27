@@ -62,6 +62,7 @@ dependencies:
 - diagrams-contrib
 - diagrams-svg
 - keys
+- pretty-simple
 ghc-options:
 - -Wall
 - -Wcompat

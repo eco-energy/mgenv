@@ -27,24 +27,24 @@ newtype GridViz = GridViz (Graph (TransmissionSpec, TransmissionState) (HHSpec, 
 
 
 batteryD :: BatterySpec -> BatteryState -> Diagram B
-batteryD spec@BatterySpec{..} state@BatteryState{..} = circle 1 <> showSpecState spec state
+batteryD spec@BatterySpec{..} state@BatteryState{..} = circle 1 `atop` showSpecState spec state
 
 panelD :: PVSpec -> Diagram B
-panelD spec@PVSpec{..} = circle 1 <> showText spec
+panelD spec@PVSpec{..} = circle 1 `atop` showText spec
 
 loadD :: Load -> LoadState -> Diagram B
-loadD spec@Load{..} state@LoadState{..} = circle 1 <> showSpecState spec state
+loadD spec@Load{..} state@LoadState{..} = circle 1 `atop` showSpecState spec state
 
 
 householdD :: HHSpec -> HHState -> Diagram B
-householdD spec@HHSpec{..} (HHState state) = circle 1 <> showSpecState spec state
+householdD spec@HHSpec{..} (HHState state) = circle 1 `atop` showSpecState spec state
 
 transmissionD :: TransmissionSpec -> TransmissionState -> Diagram B
 transmissionD spec@TransmissionSpec{..} state@TransmissionState{..} = showSpecState spec state 
 
 
 showSpecState :: (Typeable n, RealFloat n, Renderable (Text n) b, Show a1, Show a2) => a1 -> a2 -> QDiagram b V2 n Any
-showSpecState spec state = showText spec <> showText state
+showSpecState spec state = showText spec `atop` showText state
 
 
 showText :: (Typeable n, RealFloat n, Renderable (Text n) b, Show a) => a -> QDiagram b V2 n Any
@@ -52,7 +52,7 @@ showText = text . show
 
   
 joinTHH :: (TransmissionSpec, TransmissionState) -> Diagram B -> Diagram B -> Diagram B
-joinTHH tx h h' = (uncurry transmissionD tx) <> h <> h'
+joinTHH tx h h' = (uncurry transmissionD tx) `atop` h `atop` h'
 
 
 gridD :: GridViz -> Diagram B

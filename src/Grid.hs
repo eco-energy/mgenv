@@ -13,7 +13,17 @@
 {-# LANGUAGE RecordWildCards #-}
 
 
-module Grid (GridState(..), SampledGrid(..), GridSpec(..), sampleGridSpec, generateGrid, initWorldTime, initGridState, gridStep) where
+module Grid
+  ( GridState(..)
+  , SampledGrid(..)
+  , GridSpec(..)
+  , defGridSpec
+  , sampleGridSpec
+  , generateGrid
+  , initWorldTime
+  , initGridState
+  , gridStep
+  ) where
 
 import Control.Monad.Bayes.Class
 import Control.Monad (replicateM)
@@ -21,11 +31,24 @@ import Control.Monad (replicateM)
 import GHC.Generics (Generic)
 
 
-import Physics.Units (GeoC, R, Meters, EuclideanC, Theta, Watts, location, reverseHaversine, ZonedTime, incrementTime, unZonedTime, dateStartToUTC, fromUTC)
+import Physics.Units
+  ( GeoC
+  , R
+  , Meters
+  , EuclideanC
+  , BearingDeg
+  , Watts
+  , ZonedTime
+  , location
+  , reverseHaversine
+  , incrementTime
+  , dateStartToUTC
+  , fromUTC
+  )
 
 
 
-import Data.Time (addDays, diffDays, UTCTime, utcToZonedTime, NominalDiffTime, addUTCTime, zonedTimeToUTC, fromGregorian)
+import Data.Time (NominalDiffTime, fromGregorian)
 import HH (initHHState, HHSpec(..), sampleHH, NodeId, HHState(..), hhStep)
 import Physics.Transmission
 import qualified Data.List.NonEmpty as NE
@@ -81,9 +104,6 @@ initWorldTime initTime = S.iterate tn initTime
 gridStep :: StateGrid -> ControlGrid -> StateGrid
 gridStep grid control = undefined
 
-
-gridReward :: StateGrid -> Reward
-gridReward g = undefined
   
 data GridSpec = GridSpec
   { startTime :: ZonedTime
@@ -125,6 +145,14 @@ sampleGridSpec = do
   let st = fromUTC $ dateStartToUTC t'
   return $ GridSpec st cp nNodes nodeDistanceMean nodeDistanceStd
 
+defGridSpec :: GridSpec
+defGridSpec = GridSpec
+  (fromUTC $ dateStartToUTC $ fromGregorian 2020 05 01)
+  (location 24.54743000 67.62771000)
+  3
+  10
+  5
+
 initGridState :: SampledGrid -> GridState
 initGridState (SampledGrid gs) = GridState $ bimap (\_ -> initTransmissionState) (\HHSpec{..} -> HHState $ initHHState consumption) gs
 
@@ -144,11 +172,11 @@ generateGrid GridSpec {..} = do
     (nodeDict, tedges) = localAndGlobalLoc centerPoint nodeDistances nodeAngles
     edgeLoc :: Edge -> (Node, Node)
     edgeLoc (x, y) = ((nodeDict Map.! x), (nodeDict Map.! y))
-  graphs <- mapM (uncurry sampleEdge) $ map edgeLoc tedges
-  return $ mkSampledGrid $ overlays graphs
+  gEdges <- mapM (uncurry sampleEdge) $ map edgeLoc tedges
+  return $ mkSampledGrid $ edges gEdges
 
 
-localAndGlobalLoc :: GeoC -> [Meters] -> [Theta] -> (NodeDict, [Edge])
+localAndGlobalLoc :: GeoC -> [Meters] -> [BearingDeg] -> (NodeDict, [Edge])
 localAndGlobalLoc centerPoint nodeDistances nodeAngles = (nodeDict, tedges)
   where
     geoCs = map (uncurry (atDistanceAndAngle centerPoint)) $ zip nodeDistances nodeAngles
@@ -159,11 +187,11 @@ localAndGlobalLoc centerPoint nodeDistances nodeAngles = (nodeDict, tedges)
     nodes = map (\(g, (i,c))-> Node i c g) $ zip geoCs enumCs
     nodeDict = Map.fromList $ zip (map node nodes) nodes
     -- get the gps coordinate of a point a distance and at an angle away from another
-    atDistanceAndAngle :: GeoC -> Meters -> Theta -> GeoC
+    atDistanceAndAngle :: GeoC -> Meters -> BearingDeg -> GeoC
     atDistanceAndAngle = reverseHaversine
 
 
-sampleEdge :: (MonadSample m) => Node -> Node -> m (Graph TransmissionSpec HHSpec)
+sampleEdge :: (MonadSample m) => Node -> Node -> m (TransmissionSpec, HHSpec, HHSpec)
 sampleEdge loc1 loc2 = do
   let
     distance = distanceMeters (coords loc1) (coords loc2)
@@ -171,5 +199,5 @@ sampleEdge loc1 loc2 = do
   tspec <- sampleTransmissionSpec distance
   h1 <- toHH loc1
   h2 <- toHH loc2
-  return $ edge tspec h1 h2
+  return $ (tspec, h1, h2)
 

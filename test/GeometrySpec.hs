@@ -1,10 +1,9 @@
 module GeometrySpec where
 
-import Physics.Units (EuclideanC, Meters, Theta)
-import Geometry.EMST (minSpanTreeEdges, verticesToTree, pathToEdges, branches, positiveGridPoints, btwn0n360)
+import Physics.Units (EuclideanC, Meters, BearingDeg)
+import Geometry.EMST (minSpanTreeEdges, verticesToTree, pathToEdges, branches, positiveGridPoints)
 import qualified Data.List.NonEmpty as NE
 import Test.QuickCheck
-import qualified Test.QuickCheck.Property as P
 import Test.Hspec
 import qualified Data.Set as Set
 import Data.Tree
@@ -31,22 +30,26 @@ idPts = do
   ps <- pts
   return $ NE.zip (NE.fromList [0..]) ps 
 
-angPts :: Gen [(Meters, Theta)]
+angPts :: Gen [(Meters, BearingDeg)]
 angPts = suchThat arbitrary (\l -> length l > 2)
 
-thetas :: Gen (Theta)
+thetas :: Gen (BearingDeg)
 thetas = arbitrary
 
 
+propCompleteTree :: Property
 propCompleteTree = do
   forAll idPts (\ps -> (length . verticesToTree) ps == (length ps) <?> (show $ verticesToTree ps) ++ " should be " ++ (show (length ps)))
 
+prop_oneLessEdgeThanNodesParsed :: Property
 prop_oneLessEdgeThanNodesParsed = do
   forAll idPts (\ps -> length (minSpanTreeEdges ps) == ((length ps) - 1) <?> (show $ length (minSpanTreeEdges ps)) ++ " should be " ++ (show $ length ps - 1))
 
+prop_NoDuplicateEdges :: Property
 prop_NoDuplicateEdges = do
   forAll idPts (\ps -> (length $ Set.fromList (minSpanTreeEdges ps)) == (length $ minSpanTreeEdges ps))
 
+prop_AllPositive :: Property
 prop_AllPositive = do
   forAll angPts (\ps ->  (\(xs, ys) -> (foldl min 0 xs >= 0) && (foldl min 0 ys >= 0)) (unzip (positiveGridPoints ps)) )
 
@@ -78,9 +81,10 @@ prop_consistentDistances = do
                    )
                 )
 --}
-prop_angNorm = do
-  forAll thetas (\p -> (\t-> t >= 0 && t <= 360) (btwn0n360 p) )
+--prop_angNorm = do
+--  forAll thetas (\p -> (\t-> t >= 0 && t <= 360) (btwn0n360 p) )
 
+spec :: SpecWith ()
 spec = do
   describe "Geometry tests" $ do
     it "paths should be nice" $ do
@@ -100,7 +104,7 @@ spec = do
       property prop_NoDuplicateEdges
     it "all grid points should be positive" $ do
       property prop_AllPositive
-    it "checks whether angle normalization is solid" $ do
-      property prop_angNorm
+--    it "checks whether angle normalization is solid" $ do
+--      property prop_angNorm
     --it "pairwise distances of all points in descending order should be the same" $ do
     --  property prop_consistentDistances

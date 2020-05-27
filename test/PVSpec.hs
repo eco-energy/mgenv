@@ -29,4 +29,7 @@ prop_modTemp_directly_proportional_to_irradiance_and_ambient_temp = do
   forAll undefined undefined
 --}
 
-spec = undefined
+spec = do
+  describe "PV calculations" $ do
+    it "" $ do
+      1 `shouldBe` 1

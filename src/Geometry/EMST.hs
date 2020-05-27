@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
-module Geometry.EMST (minSpanTreeEdges, verticesToTree, pathToEdges, branches, positiveGridPoints, btwn0n360) where
+module Geometry.EMST (minSpanTreeEdges, verticesToTree, pathToEdges, branches, positiveGridPoints) where
 
 import Algorithms.Geometry.DelaunayTriangulation.Naive
 import Algorithms.Geometry.DelaunayTriangulation.Types
@@ -50,7 +50,7 @@ branches (Node x []) = [[x]]
 branches (Node x ts) = map (x:) (concatMap branches ts)
 
 
-positiveGridPoints :: [(Meters, Theta)] -> [EuclideanC]
+positiveGridPoints :: [(Meters, BearingDeg)] -> [EuclideanC]
 positiveGridPoints xs = shift cs
   where
     shift :: [(Meters, Meters)] -> [(Meters, Meters)]
@@ -62,17 +62,5 @@ positiveGridPoints xs = shift cs
     rightwards = abs (foldl min 0 $ map fst cs)
     upwards = abs (foldl min 0 $ map snd cs)
     cs = map toCartesian xs
-    toCartesian :: (Meters, Theta) -> (Meters, Meters)
-    toCartesian (r, th) = (r*sin nth, r * cos nth)
-      where
-        nth = (toRadians . btwn0n360) th
-        toRadians = (*(pi/180))
-
-
-btwn0n360 :: Theta -> Theta
-btwn0n360 n
-  | n <= 360 && n >= 0 = n
-  | n > 360 = n - (360*((fromIntegral . floor) ((n/360))))
-  | n < 0 && n > (-360) = n + 360
-  | n < (-360) = n + (360*((fromIntegral . ceiling) ((n/360))))
-  | otherwise = n
+    toCartesian :: (Meters, BearingDeg) -> (Meters, Meters)
+    toCartesian (r, th) = (r*sin (toRadians th), r * cos (toRadians th))

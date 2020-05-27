@@ -8,14 +8,15 @@ module Physics.Units
    SoC, Efficiency,
    Sec, DelT,
    Meters,
-   GeoC, EuclideanC, Temperature, MetersPerSecond, Theta,
+   GeoC, EuclideanC, Temperature, MetersPerSecond, BearingDeg,
    ZonedTime, unZonedTime, incrementTime, mkZonedTime, dateStartToUTC, fromUTC,
-   location, haversine, reverseHaversine) where
+   location, haversine, reverseHaversine, bearing, toRadians, toDegrees) where
 
 
 import qualified Data.Astro.Coordinate as A
 import qualified Data.Astro.Types      as A
 import qualified Data.Time             as T
+import Data.Fixed
 
 -- Base Type
 type R = Double
@@ -104,14 +105,14 @@ type MetersSq = R
 
 type OhmMeters = R
 
-type Theta = R -- ANGLE
+type BearingDeg = R -- ANGLE IN Degrees
 
 
-toRadians :: Floating a => a -> a
-toRadians d = d * pi / 180
+toRadians :: (RealFrac a, Floating a) => a -> a
+toRadians d = (d `mod'` 360) * pi / 180
 
-toDegrees :: Floating a => a -> a
-toDegrees r = r * 180 / pi
+toDegrees :: (RealFrac a, Floating a) => a -> a
+toDegrees r = mod' ((r * 180 / pi) + 360) 360.0
 
 earthRad :: Meters
 earthRad = (6378137 :: Meters)
@@ -127,11 +128,21 @@ haversine c0 c1 = earthRad * c
     square x = x * x
     (A.GeoC (A.DD lat0) (A.DD long0)) = c0
     (A.GeoC (A.DD lat1) (A.DD long1)) = c1
-  
 
-reverseHaversine :: GeoC -> Meters -> Theta -> GeoC
-reverseHaversine (A.GeoC (A.DD lat) (A.DD long)) d theta = location lat' long'
+bearing :: GeoC -> GeoC -> BearingDeg
+bearing (A.GeoC (A.DD lat0) (A.DD long0)) (A.GeoC (A.DD lat1) (A.DD long1)) = toDegrees $ atan2 y x
   where
-    lat' = toDegrees $ asin ((sin lat * cos angDist) + (cos lat * sin angDist) + cos theta)
-    long' = toDegrees $ long + (atan2 (sin theta * sin angDist * cos lat) ((cos angDist) - (sin lat * sin lat')))
+    y = (sin (long' - long)) * cos (lat')
+    x = (cos lat * sin lat') - (sin lat * cos lat' * cos (lat' - lat))
+    [lat, long, lat', long'] = toDegrees <$> [lat0, long0, lat1, long1]
+    
+
+reverseHaversine :: GeoC -> Meters -> BearingDeg -> GeoC
+reverseHaversine (A.GeoC (A.DD lat0) (A.DD long0)) d theta' = location (toDegrees lat') (toDegrees long')
+  where
+    lat' =  asin ((sin lat * cos angDist) + (cos lat * sin angDist * cos theta))
+    long' = long - (atan2 (sin theta * sin angDist * cos lat) ((cos angDist) - (sin lat * sin lat')))
     angDist = d / earthRad
+    theta = toRadians theta'
+    lat = toRadians lat0
+    long = toRadians long0
