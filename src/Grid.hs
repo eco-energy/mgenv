@@ -154,7 +154,11 @@ defGridSpec = GridSpec
   5
 
 initGridState :: SampledGrid -> GridState
-initGridState (SampledGrid gs) = GridState $ bimap (\_ -> initTransmissionState) (\HHSpec{..} -> HHState $ initHHState consumption) gs
+initGridState (SampledGrid gs) = GridState $ bimap txInit (\HHSpec{..} -> HHState $ initHHState consumption) gs
+  where
+    txInit tx
+      | tx == mempty = mempty
+      | otherwise = TransmissionState 0.001
 
 toHH :: (MonadSample m) => Node -> m HHSpec
 toHH (Node{node, geoCoords, coords}) = sampleHH node geoCoords coords

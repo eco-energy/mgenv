@@ -2,9 +2,9 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveGeneric #-}
 module Physics.Consumption
-  ( ConsumptionSpec
+  ( ConsumptionSpec(..)
   , sampleConsumptionSpec
-  , ConsumptionState
+  , ConsumptionState(..)
   , initConsumptionState
   , initConsumptionStateM
   , runConsumption

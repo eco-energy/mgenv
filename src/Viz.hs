@@ -2,6 +2,8 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE FlexibleContexts          #-}
 {-# LANGUAGE TypeFamilies              #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+
 
 module Viz where
 
@@ -10,11 +12,11 @@ import Diagrams.Prelude
 import Diagrams.Backend.SVG.CmdLine
 
 import Physics.Storage
-import Physics.PV
+import Physics.Generation
 import Physics.Consumption
 import Physics.Transmission
 
-import HH
+import HH hiding (loc)
 import Grid
 
 import qualified Algebra.Graph.Labelled as G
@@ -23,40 +25,59 @@ import Data.Typeable (Typeable)
 import Diagrams.TwoD.Text (Text)
 import Data.Key
 
-newtype GridViz = GridViz (Graph (TransmissionSpec, TransmissionState) (HHSpec, HHState))
+newtype GridViz = GridViz (Graph (TransmissionSpec, TransmissionState) (HHSpec, HHState)) deriving (Eq, Ord, Show)
 
+data CompNames = BatteryD NodeId
+  | NodeD NodeId
+  | GenD NodeId
+  | StorageD NodeId
+  | ConsumptionD NodeId
+  | HHD NodeId
+  | THH (NodeId, NodeId)
+  | GV String
+  deriving (Typeable, Eq, Ord, Show)
+
+instance IsName CompNames
 
 batteryD :: BatterySpec -> BatteryState -> Diagram B
-batteryD spec@BatterySpec{..} state@BatteryState{..} = circle 1 `atop` showSpecState spec state
+batteryD spec@BatterySpec{..} state@BatteryState{..} = (circle 4 # lc green <> showSpecState spec state)
 
-panelD :: PVSpec -> Diagram B
-panelD spec@PVSpec{..} = circle 1 `atop` showText spec
+generationD :: GenSpec -> Diagram B
+generationD (GenSpec spec) = circle 4 # lc yellow <> showText spec
 
 loadD :: Load -> LoadState -> Diagram B
-loadD spec@Load{..} state@LoadState{..} = circle 1 `atop` showSpecState spec state
+loadD spec@Load{..} state@LoadState{..} = circle 4 # lc red <> showSpecState spec state
 
+consumptionD :: ConsumptionSpec -> ConsumptionState -> Diagram B
+consumptionD (ConsumptionSpec specs) (ConsumptionState states) =  foldr (<>) mempty $ (uncurry loadD) <$> zip specs states
 
-householdD :: HHSpec -> HHState -> Diagram B
-householdD spec@HHSpec{..} (HHState state) = circle 1 `atop` showSpecState spec state
+householdD :: HHSpec -> HHState -> Located (Diagram B)
+householdD spec@HHSpec{..} (HHState (batState, conState)) =
+  (circle 18 # lc blanchedalmond `atop` comps) # named (NodeD nId) `at` (p2 gridLoc)  
+  where
+    comps = (generationD generation) # named (GenD nId) 
+      ||| (batteryD storage batState) # named (StorageD nId)
+      ||| (consumptionD consumption conState) # named (ConsumptionD nId)
 
-transmissionD :: TransmissionSpec -> TransmissionState -> Diagram B
-transmissionD spec@TransmissionSpec{..} state@TransmissionState{..} = showSpecState spec state 
+transmissionD :: TransmissionSpec -> TransmissionState -> Located (Diagram B) -> Located (Diagram B) -> Located (Diagram B)
+transmissionD spec@TransmissionSpec{..} state@TransmissionState{..} h h' = showSpecState spec state # connectOutside (topName h) (topName h') `at` (loc h)
+  where
+    topName = fst . head . names . unLoc -- showSpecState spec state 
 
-
-showSpecState :: (Typeable n, RealFloat n, Renderable (Text n) b, Show a1, Show a2) => a1 -> a2 -> QDiagram b V2 n Any
-showSpecState spec state = showText spec `atop` showText state
+showSpecState :: (Show a1, Show a2) => a1 -> a2 -> Diagram B
+showSpecState spec state = (showText spec <> circle 3) ||| (showText state <> circle 3) 
 
 
 showText :: (Typeable n, RealFloat n, Renderable (Text n) b, Show a) => a -> QDiagram b V2 n Any
 showText = text . show
 
   
-joinTHH :: (TransmissionSpec, TransmissionState) -> Diagram B -> Diagram B -> Diagram B
-joinTHH tx h h' = (uncurry transmissionD tx) `atop` h `atop` h'
+joinTHH :: (TransmissionSpec, TransmissionState) -> Located (Diagram B) -> Located (Diagram B) -> Located (Diagram B)
+joinTHH tx h h' = (uncurry transmissionD tx) h h'
 
 
-gridD :: GridViz -> Diagram B
-gridD (GridViz g) = G.foldg mempty (uncurry householdD) joinTHH g
+gridD :: (Double, Double) -> GridViz -> Located (Diagram B)
+gridD cp (GridViz g) = (G.foldg (circle 0 # named (GV "top") `at` p2 cp) (uncurry householdD) joinTHH g) 
 
 
 mkGridViz :: SampledGrid -> GridState -> GridViz
