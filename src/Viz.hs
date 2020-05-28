@@ -59,10 +59,9 @@ householdD spec@HHSpec{..} (HHState (batState, conState)) =
       ||| (batteryD storage batState) # named (StorageD nId)
       ||| (consumptionD consumption conState) # named (ConsumptionD nId)
 
-transmissionD :: TransmissionSpec -> TransmissionState -> Located (Diagram B) -> Located (Diagram B) -> Located (Diagram B)
-transmissionD spec@TransmissionSpec{..} state@TransmissionState{..} h h' = showSpecState spec state # connectOutside (topName h) (topName h') `at` (loc h)
-  where
-    topName = fst . head . names . unLoc -- showSpecState spec state 
+transmissionD :: TransmissionSpec -> TransmissionState -> Diagram B
+transmissionD spec@TransmissionSpec{..} state@TransmissionState{..} = showSpecState spec state
+
 
 showSpecState :: (Show a1, Show a2) => a1 -> a2 -> Diagram B
 showSpecState spec state = (showText spec <> circle 3) ||| (showText state <> circle 3) 
@@ -73,7 +72,15 @@ showText = text . show
 
   
 joinTHH :: (TransmissionSpec, TransmissionState) -> Located (Diagram B) -> Located (Diagram B) -> Located (Diagram B)
-joinTHH tx h h' = (uncurry transmissionD tx) h h'
+joinTHH tx h h'
+  | snd tx == mempty = mempty `at` (loc h)
+  | otherwise = (uncurry transmissionD tx) # connectOutside
+                  (topName . ns' $ h)
+                  (topName . ns' $ h') `at` (loc h)
+  where
+    ns' = names . unLoc
+    topName (x:_) = fst x -- showSpecState spec state
+    topName [] = error "no name in diagram"
 
 
 gridD :: (Double, Double) -> GridViz -> Located (Diagram B)
@@ -83,7 +90,9 @@ gridD cp (GridViz g) = (G.foldg (circle 0 # named (GV "top") `at` p2 cp) (uncurr
 mkGridViz :: SampledGrid -> GridState -> GridViz
 mkGridViz (SampledGrid spec) (GridState state) = GridViz $ combine
   where
-    combine = G.edges $ (\((tsp, hsp, hsp'), (tst, hst, hst')) -> ((tsp, tst), (hsp, hst), (hsp', hst'))) <$> (zip espec estate)
+    combine = G.edges $ (\((tsp, hsp, hsp'), (tst, hst, hst')) ->
+                           ((tsp, tst), (hsp, hst), (hsp', hst')))
+              <$> (zip espec estate)
     espec :: [(TransmissionSpec, HHSpec, HHSpec)]
     espec = G.edgeList spec
     estate :: [(TransmissionState, HHState, HHState)]
