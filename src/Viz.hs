@@ -21,11 +21,18 @@ import Grid
 
 import qualified Algebra.Graph.Labelled as G
 import Algebra.Graph.Labelled (Graph)
+
 import Data.Typeable (Typeable)
 import Diagrams.TwoD.Text (Text)
 import Data.Key
 
-newtype GridViz = GridViz (Graph (TransmissionSpec, TransmissionState) (HHSpec, HHState)) deriving (Eq, Ord, Show)
+import qualified Data.Map.Strict as M
+import Data.Maybe (fromJust)
+
+type TxE = (TransmissionSpec, TransmissionState)
+type HHV = (HHSpec, HHState)
+
+newtype GridViz = GridViz (Graph TxE HHV) deriving (Eq, Ord, Show)
 
 data CompNames = BatteryD NodeId
   | NodeD NodeId
@@ -64,7 +71,7 @@ transmissionD spec@TransmissionSpec{..} state@TransmissionState{..} = showSpecSt
 
 
 showSpecState :: (Show a1, Show a2) => a1 -> a2 -> Diagram B
-showSpecState spec state = (showText spec <> circle 3) ||| (showText state <> circle 3) 
+showSpecState spec state = circle 20 <> ((showText spec <> square 10) ||| (showText state <> square 10)) 
 
 
 showText :: (Typeable n, RealFloat n, Renderable (Text n) b, Show a) => a -> QDiagram b V2 n Any
@@ -88,9 +95,9 @@ gridD cp (GridViz g) = (G.foldg (circle 0 # named (GV "top") `at` p2 cp) (uncurr
 
 
 mkGridViz :: SampledGrid -> GridState -> GridViz
-mkGridViz (SampledGrid spec) (GridState state) = GridViz $ combine
+mkGridViz (SampledGrid spec) (GridState state) = GridViz $ G.edges combined
   where
-    combine = G.edges $ (\((tsp, hsp, hsp'), (tst, hst, hst')) ->
+    combined = (\((tsp, hsp, hsp'), (tst, hst, hst')) ->
                            ((tsp, tst), (hsp, hst), (hsp', hst')))
               <$> (zip espec estate)
     espec :: [(TransmissionSpec, HHSpec, HHSpec)]
@@ -98,5 +105,38 @@ mkGridViz (SampledGrid spec) (GridState state) = GridViz $ combine
     estate :: [(TransmissionState, HHState, HHState)]
     estate = G.edgeList state
     
-    
-    
+
+
+-- | A data type for specifying whether edges should be drawn on top
+--   of vertices or vice versa.
+data GraphLayering = EdgesOnTop | VerticesOnTop
+  deriving (Show, Read, Eq, Ord)    
+
+-- Decomposes a graph with a location into a map from the node to a location and a list of edges
+vGraph :: Graph TxE HHV -> (M.Map HHV (P2 Double), [(HHV, P2 Double, HHV, P2 Double -> TxE, Path V2 Double)])
+vGraph = undefined
+
+-- | The same as 'drawGraph', but with an extra parameter allowing you
+--   to specify whether vertices or edges should be drawn on top.
+drawGraph'
+  :: (Ord v, Semigroup m)
+  => GraphLayering
+  -> (v -> P2 Double -> QDiagram b V2 Double m)
+  -> (v -> P2 Double -> v -> P2 Double -> e -> Path V2 Double -> QDiagram b V2 Double m)
+  -> G.Graph e v
+  -> QDiagram b V2 Double m
+drawGraph' gl drawV drawE gr
+  = case gl of
+      EdgesOnTop    -> mconcat components
+      VerticesOnTop -> mconcat (reverse components)
+  where
+    getGraph = undefined
+    components =
+      [ mconcat (map drawE' edges)
+      , mconcat (map (uncurry drawV) (M.assocs vmap))
+      ]
+    (vmap, edges) = getGraph gr
+    drawE' (v1,v2,e,p)
+      = drawE v1 (fromJust $ M.lookup v1 vmap) v2 (fromJust $ M.lookup v2 vmap) e p
+
+-- | Round-trip a graph through an external graphviz layout algorithm, and
