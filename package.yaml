@@ -21,7 +21,6 @@ description:         Please see the README on Github at <https://github.com/faez
 
 dependencies:
 - base >= 4.11 && < 10
-- rio >= 0.1.8.0
 - streamly
 - algebraic-graphs
 - time
@@ -35,8 +34,6 @@ dependencies:
 - non-empty
 - geodetics
 - mtl
-- hgeometry
-- hgeometry-combinatorial
 - containers
 - lens
 - concat-classes
@@ -63,6 +60,8 @@ dependencies:
 - diagrams-svg
 - keys
 - pretty-simple
+- hgeometry
+- hgeometry-combinatorial
 ghc-options:
 - -Wall
 - -Wcompat
