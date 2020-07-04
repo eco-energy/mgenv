@@ -53,11 +53,5 @@ source-repository-package
     tag: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
     subdir: hardware
 
-source-repository-package
-    type: git
-    location: https://github.com/eco-energy/monad-bayes.git
-    tag: 8078cced02401f4c58f5fb15da6be8b71eb246ba
-    subdir: .
-
 allow-older: *
 allow-newer: *

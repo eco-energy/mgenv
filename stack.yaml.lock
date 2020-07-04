@@ -109,19 +109,6 @@ packages:
     git: https://github.com/conal/concat.git
     commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
 - completed:
-    subdir: .
-    name: monad-bayes
-    version: 0.1.0.0
-    git: https://github.com/eco-energy/monad-bayes.git
-    pantry-tree:
-      size: 3138
-      sha256: bc80e987256d9fe23e0b5e9f3e462be5a095f09d3d1375402595d962765c9b84
-    commit: 8078cced02401f4c58f5fb15da6be8b71eb246ba
-  original:
-    subdir: .
-    git: https://github.com/eco-energy/monad-bayes.git
-    commit: 8078cced02401f4c58f5fb15da6be8b71eb246ba
-- completed:
     hackage: geodetics-0.1.0@sha256:699c10cd8d69222b125d054cdc8e2bcee7cb0558c78fa1b4fa06b2d3ecf29f5c,2387
     pantry-tree:
       size: 1086
@@ -142,6 +129,13 @@ packages:
       sha256: 34db701f1428f1e64c58b0c1df02228c136f1c7b0321a832c9ba6800b8049078
   original:
     hackage: hgeometry-combinatorial-0.9.0.0@sha256:a03b48302d8c542ff2ff90ba5d45f2742cc21ed1a676c8fa4870cd461a273354,7367
+- completed:
+    hackage: monad-bayes-0.1.1.0@sha256:57d96f530a37a1c8efed0830c7f2bcf86da05d0d53324aebdd5b5aa165d72829,5132
+    pantry-tree:
+      size: 2419
+      sha256: 39c3c264da0b75b717909693f5ecaf8342761e4da62d6c273ae4fdc5d2011afb
+  original:
+    hackage: monad-bayes-0.1.1.0@sha256:57d96f530a37a1c8efed0830c7f2bcf86da05d0d53324aebdd5b5aa165d72829,5132
 snapshots:
 - completed:
     size: 524799
