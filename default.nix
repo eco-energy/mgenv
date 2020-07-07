@@ -15,9 +15,11 @@
 }: pkgs.haskell-nix.project {
   # 'cleanGit' cleans a source directory based on the files known by git
   src = pkgs.haskell-nix.haskellLib.cleanGit {
-    name = "haskell-nix-project";
+    name = "mgenv";
     src = ./.;
   };
   projectFileName = "stack.yaml";
+  stack-sha256="166491vz810yrhgk09yjk3yfznmfmr8nkchg24cr5p5zxhvq3nfk";
+  materialized=./mgenv.materialized;
 }
 
