@@ -47,10 +47,18 @@ extra-deps:
       - graphics
       - hardware
     # nix-sha256: 1a3z21n0ispcc4irggkwsclfbv87z1gb52lfafwx09n8bszr8c19
+  - git: https://github.com/faezs/opt-expect.git
+    commit: c1f91ea02a8fcb50587e7a50514363f7a3bbd5f4
   - geodetics-0.1.0@sha256:699c10cd8d69222b125d054cdc8e2bcee7cb0558c78fa1b4fa06b2d3ecf29f5c,2387
   - hgeometry-0.9.0.0@sha256:43043574d2ce39c543dfadb629ab3a41fe65d7bf68a1426d8d01312818bc6e4e,9702
   - hgeometry-combinatorial-0.9.0.0@sha256:a03b48302d8c542ff2ff90ba5d45f2742cc21ed1a676c8fa4870cd461a273354,7367
   - monad-bayes-0.1.1.0@sha256:57d96f530a37a1c8efed0830c7f2bcf86da05d0d53324aebdd5b5aa165d72829,5132
+  - fusion-plugin-0.2.1@sha256:f72d7393d2c39909050cae46173e0218bf533a899be05b448ae55f9d4a81be9c,2349
+  - perfect-vector-shuffle-0.1.1.1@sha256:8656a3f1f491d1d79aba9e0a5dbb08589613202b08c7a9b92570d6bec7390093,3668
+  - streamly-0.7.2@sha256:2dbcbd2d807b5465a281bde1a71a21f1e1e1b00be93b23083a868a07dc76de95,28286
+  - fusion-plugin-types-0.1.0@sha256:0f11bbc445ab8ae3dbbb3d5d2ea198bdb1ac020518b7f4f7579035dc89182438,1506
+
+  
 #
 # extra-deps: []
 

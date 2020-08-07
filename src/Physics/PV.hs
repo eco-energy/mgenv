@@ -16,6 +16,7 @@ import Physics.Units (R, WattsPerMeterSq, Temperature, Watts, Amp, V, Ohm, Meter
 import Control.Monad.Bayes.Class
 import Control.Monad (liftM)
 
+import Randomizable
 
 -- An implementation of the PVWatts Model.
 -- Should be replaced by DeSotto's when we get the datasheets
@@ -58,7 +59,7 @@ horizonCoordinates :: GeographicCoordinates -> JulianDate -> HorizonCoordinates
 horizonCoordinates loc jd = ec1ToHC loc jd (sunPosition2 jd)
 
 effectiveIrradiance :: GeographicCoordinates -> PVSpec -> ZonedTime -> WattsPerMeterSq
-effectiveIrradiance loc PVSpec {..} t = directNormalIrradiance * cos aoi
+effectiveIrradiance loc PVSpec{..} t = directNormalIrradiance * cos aoi
   where
     directNormalIrradiance :: WattsPerMeterSq
     directNormalIrradiance
@@ -98,12 +99,15 @@ data PVSpec = PVSpec
   } deriving (Eq, Ord, Show, Generic)
 
 
+instance Randomizable PVSpec where
+  sampleThis = samplePVSpec
+
 samplePVSpec :: (MonadSample m) => m PVSpec
 samplePVSpec = do
   arrAz <- do return 180 -- assume southward facing
   arrTilt <- normal 30 10
   tempCorrection <- liftM abs $ normal 0.0044 0.05
-  power <- uniformD [50.. 500]
+  power <- uniformD [50,100.. 500]
   mount <- do return OpenRack
   moduleType <- do return GlassCellGlass
   return $ PVSpec arrAz arrTilt tempCorrection power mount moduleType

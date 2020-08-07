@@ -62,6 +62,10 @@ dependencies:
 - pretty-simple
 - hgeometry
 - hgeometry-combinatorial
+- opt-expect
+- transformers
+
+
 ghc-options:
 - -Wall
 - -Wcompat

@@ -9,7 +9,7 @@
 {-# Language TemplateHaskell #-}
 
 module Server where
-
+{--
 import Env (getGridState, getGridSpec)
 
 import Servant ( Post
@@ -83,4 +83,5 @@ server = do
   f $ toLogStr ("\n----------------------\n"::String)
   f $ toLogStr ("\n"::String)
   run 4000 $ static $ app fl
+--}
 --}

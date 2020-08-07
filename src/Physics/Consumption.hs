@@ -14,13 +14,17 @@ module Physics.Consumption
 
 import Physics.Units
 import GHC.Generics (Generic)
-import Control.Monad.Bayes.Class
 import Control.Monad (replicateM, liftM, replicateM, mapM)
+
+import Randomizable
 
 data Load = Load
   { power :: Watts
   , utility :: R
   } deriving (Eq, Ord, Show, Generic)
+
+instance Randomizable Load where
+  sampleThis = sampleLoadSpec
 
 
 data LoadState = LoadState
@@ -31,6 +35,10 @@ data LoadState = LoadState
 newtype ConsumptionSpec = ConsumptionSpec [Load] deriving (Eq, Ord, Show, Generic)
 
 newtype ConsumptionState = ConsumptionState [LoadState] deriving (Eq, Ord, Show, Generic)
+
+
+instance Randomizable ConsumptionSpec where
+  sampleThis = sampleConsumptionSpec
 
 sampleLoadSpec :: (MonadSample m) => m Load
 sampleLoadSpec = do

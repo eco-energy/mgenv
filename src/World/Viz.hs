@@ -12,7 +12,7 @@ import Diagrams.Prelude
 import Diagrams.Backend.SVG.CmdLine
 
 import Physics.Storage
-import Physics.Generation
+import Physics.PV
 import Physics.Consumption
 import Physics.Transmission
 
@@ -49,8 +49,8 @@ instance IsName CompNames
 batteryD :: BatterySpec -> BatteryState -> Diagram B
 batteryD spec@BatterySpec{..} state@BatteryState{..} = (circle 4 # lc green <> showSpecState spec state)
 
-generationD :: GenSpec -> Diagram B
-generationD (GenSpec spec) = circle 4 # lc yellow <> showText spec
+generationD :: PVSpec -> Diagram B
+generationD spec = circle 4 # lc yellow <> showText spec
 
 loadD :: Load -> LoadState -> Diagram B
 loadD spec@Load{..} state@LoadState{..} = circle 4 # lc red <> showSpecState spec state

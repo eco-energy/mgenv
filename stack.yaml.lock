@@ -109,6 +109,17 @@ packages:
     git: https://github.com/conal/concat.git
     commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
 - completed:
+    name: opt-expect
+    version: 0.1.0.0
+    git: https://github.com/faezs/opt-expect.git
+    pantry-tree:
+      size: 2037
+      sha256: dc828669f938b45cf1a1cd102cd309c29dc9a463d0e174954e804b382b73f1e4
+    commit: c1f91ea02a8fcb50587e7a50514363f7a3bbd5f4
+  original:
+    git: https://github.com/faezs/opt-expect.git
+    commit: c1f91ea02a8fcb50587e7a50514363f7a3bbd5f4
+- completed:
     hackage: geodetics-0.1.0@sha256:699c10cd8d69222b125d054cdc8e2bcee7cb0558c78fa1b4fa06b2d3ecf29f5c,2387
     pantry-tree:
       size: 1086
@@ -136,6 +147,34 @@ packages:
       sha256: 39c3c264da0b75b717909693f5ecaf8342761e4da62d6c273ae4fdc5d2011afb
   original:
     hackage: monad-bayes-0.1.1.0@sha256:57d96f530a37a1c8efed0830c7f2bcf86da05d0d53324aebdd5b5aa165d72829,5132
+- completed:
+    hackage: fusion-plugin-0.2.1@sha256:f72d7393d2c39909050cae46173e0218bf533a899be05b448ae55f9d4a81be9c,2349
+    pantry-tree:
+      size: 369
+      sha256: 87b912647b1a060b3b6cdf9bdc24b6e8ab9a8847c5333bb3bdd948af513f491f
+  original:
+    hackage: fusion-plugin-0.2.1@sha256:f72d7393d2c39909050cae46173e0218bf533a899be05b448ae55f9d4a81be9c,2349
+- completed:
+    hackage: perfect-vector-shuffle-0.1.1.1@sha256:8656a3f1f491d1d79aba9e0a5dbb08589613202b08c7a9b92570d6bec7390093,3668
+    pantry-tree:
+      size: 422
+      sha256: b80f0796f26f723e7fbfae1c4d134a74732b5eaef3fe8a4d1cb37259ec7f737f
+  original:
+    hackage: perfect-vector-shuffle-0.1.1.1@sha256:8656a3f1f491d1d79aba9e0a5dbb08589613202b08c7a9b92570d6bec7390093,3668
+- completed:
+    hackage: streamly-0.7.2@sha256:2dbcbd2d807b5465a281bde1a71a21f1e1e1b00be93b23083a868a07dc76de95,28286
+    pantry-tree:
+      size: 12739
+      sha256: fe4ea63b78d983f54a4a159727aa1f441b23aa1d919405de370474bdd0e6791f
+  original:
+    hackage: streamly-0.7.2@sha256:2dbcbd2d807b5465a281bde1a71a21f1e1e1b00be93b23083a868a07dc76de95,28286
+- completed:
+    hackage: fusion-plugin-types-0.1.0@sha256:0f11bbc445ab8ae3dbbb3d5d2ea198bdb1ac020518b7f4f7579035dc89182438,1506
+    pantry-tree:
+      size: 378
+      sha256: c349aa6c4e10a57c65ae83eb1082948642b66a97bf0c0b73e57e4d88da89f3cd
+  original:
+    hackage: fusion-plugin-types-0.1.0@sha256:0f11bbc445ab8ae3dbbb3d5d2ea198bdb1ac020518b7f4f7579035dc89182438,1506
 snapshots:
 - completed:
     size: 524799

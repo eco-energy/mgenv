@@ -47,6 +47,9 @@ import Physics.Units
   )
 
 
+import RL.MDP
+import Randomizable
+
 
 import Data.Time (NominalDiffTime, fromGregorian)
 import HH (initHHState, HHSpec(..), sampleHH, NodeId, HHState(..), hhStep)
@@ -54,7 +57,6 @@ import Physics.Transmission
 import qualified Data.List.NonEmpty as NE
 
 import Geometry.EMST (minSpanTreeEdges, positiveGridPoints)
-import Algebra.Graph.Labelled
 import qualified Data.Map as Map
 
 import Data.Proxy
@@ -63,6 +65,12 @@ import Streamly
 import qualified Streamly.Prelude as S
 
 import Data.Bifunctor
+import Data.Monoid
+import qualified Algebra.Graph as G
+import qualified Algebra.Graph.Labelled as LG
+import Algebra.Graph.Class
+
+import Control.Monad.State
 
 {-
 Semantically, what is the purpose of the graph here?
@@ -72,24 +80,16 @@ An overlay of edges makes a grid, the consequences of which are
 - fold
 The cost function is
 sum batteryState 
-
-
-
 --}
 
 
-type Reward = R
-
 newtype Grid e n = Grid
-  { unGrid :: Graph e n
+  { unGrid :: LG.Graph e n
   } deriving (Eq, Show, Generic, Functor)
 
---type StateGrid = Grid Edge Node
-
-type ControlGrid = Grid Bool Watts
 
 
-mkGrid :: (Semigroup n, Monoid e) => Graph e n -> Grid e n
+mkGrid :: (Semigroup n, Monoid e) => LG.Graph e n -> Grid e n
 mkGrid = Grid
 
 type StateGrid = Grid TransmissionState HHState
@@ -101,7 +101,6 @@ initWorldTime initTime = S.iterate tn initTime
 
 
 
-gridStep :: StateGrid -> ControlGrid -> StateGrid
 gridStep grid control = undefined
 
   
@@ -113,10 +112,13 @@ data GridSpec = GridSpec
   , nodeDistanceStd :: R
   } deriving (Eq, Show, Generic)
 
+instance Randomizable GridSpec where
+  sampleThis = sampleGridSpec
 
-newtype SampledGrid = SampledGrid (Graph TransmissionSpec HHSpec) deriving (Eq, Show, Generic)
 
-newtype GridState = GridState (Graph TransmissionState HHState) deriving (Show, Generic)
+newtype SampledGrid = SampledGrid (LG.Graph TransmissionSpec HHSpec) deriving (Eq, Show, Generic)
+
+newtype GridState = GridState (LG.Graph TransmissionState HHState) deriving (Show, Generic)
 
 
 data Node = Node
@@ -129,7 +131,7 @@ instance Ord Node where
   (Node n1 _ _) `compare` (Node n2 _ _) = n1 `compare` n2
 
 
-mkSampledGrid :: Graph TransmissionSpec HHSpec -> SampledGrid
+mkSampledGrid :: LG.Graph TransmissionSpec HHSpec -> SampledGrid
 mkSampledGrid = SampledGrid
 
 sampleGridSpec :: MonadSample m => m GridSpec
@@ -177,7 +179,7 @@ generateGrid GridSpec {..} = do
     edgeLoc :: Edge -> (Node, Node)
     edgeLoc (x, y) = ((nodeDict Map.! x), (nodeDict Map.! y))
   gEdges <- mapM (uncurry sampleEdge) $ map edgeLoc tedges
-  return $ mkSampledGrid $ edges gEdges
+  return $ mkSampledGrid $ LG.edges gEdges
 
 
 localAndGlobalLoc :: GeoC -> [Meters] -> [BearingDeg] -> (NodeDict, [Edge])
@@ -200,8 +202,19 @@ sampleEdge loc1 loc2 = do
   let
     distance = distanceMeters (coords loc1) (coords loc2)
     distanceMeters (x1, y1) (x2, y2) = (x1 - x2)**2 + (y1 - y2)**2
-  tspec <- sampleTransmissionSpec distance
+  tspec <- sampleTransmissionSpec --distance
   h1 <- toHH loc1
   h2 <- toHH loc2
   return $ (tspec, h1, h2)
+
+
+
+
+-- a smooth, real-valued function H over a symplectic manifold defines a hamiltonian system.
+-- The symplectic manifold is the phase space P.
+-- The vector field induced by H over P is hamiltonian vector field which induces a
+-- time-parameter family of transformations of P, in an isotopy of symplectomorphisms, begining at identity.
+-- Symplectomorphisms preserve the volume form on the phase space.
+hamiltonian f = undefined
+
 
