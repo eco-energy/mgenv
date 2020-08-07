@@ -3,7 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DeriveGeneric #-}
 
-module Env where
+module Grid.Env where
 
 
 import Streamly
@@ -16,7 +16,7 @@ import Data.Functor.Rep
 
 import GHC.Generics (Generic)
 
-import Grid (SampledGrid, GridState, sampleGridSpec, generateGrid, initGridState, initWorldTime, gridStep)
+import Grid.Sample (SampledGrid, GridState, sampleGridSpec, generateGrid, initGridState, initWorldTime, gridStep)
 
 
 -- This should be at grid level

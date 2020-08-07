@@ -9,7 +9,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module GridMDP where
+module Grid.MDP where
 
 import GHC.Generics (Generic)
 

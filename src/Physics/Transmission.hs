@@ -12,7 +12,7 @@ module Physics.Transmission
 
 import Physics.Units
 import GHC.Generics (Generic)
-import Randomizable
+import Prob.Randomizable
 
 
 

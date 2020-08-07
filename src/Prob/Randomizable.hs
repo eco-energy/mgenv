@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE NamedFieldPuns #-}
-module Randomizable
+module Prob.Randomizable
   ( Randomizable(..)
   , module Control.Monad.Bayes.Class) where
 

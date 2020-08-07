@@ -16,7 +16,7 @@ import Physics.Units
 import GHC.Generics (Generic)
 import Control.Monad (replicateM, liftM, replicateM, mapM)
 
-import Randomizable
+import Prob.Randomizable
 
 data Load = Load
   { power :: Watts

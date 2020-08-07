@@ -10,7 +10,7 @@ import Physics.Units
 import Control.Monad.Bayes.Class
 import Control.Monad (liftM)
 
-import Randomizable
+import Prob.Randomizable
 {--
 In terms of the environment design, what the RL controller should see
 must be just an estimate of the battery energy state in WattHours.

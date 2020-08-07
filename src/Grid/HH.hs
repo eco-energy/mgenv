@@ -4,7 +4,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ConstraintKinds #-}
-module HH
+module Grid.HH
   ( sampleHH
   , HHSpec(..)
   , NodeId

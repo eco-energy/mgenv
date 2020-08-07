@@ -16,7 +16,7 @@ import Physics.Units (R, WattsPerMeterSq, Temperature, Watts, Amp, V, Ohm, Meter
 import Control.Monad.Bayes.Class
 import Control.Monad (liftM)
 
-import Randomizable
+import Prob.Randomizable
 
 -- An implementation of the PVWatts Model.
 -- Should be replaced by DeSotto's when we get the datasheets

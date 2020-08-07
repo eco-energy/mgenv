@@ -8,7 +8,7 @@
 {-# Language TypeFamilies #-}
 {-# Language TemplateHaskell #-}
 
-module Server where
+module World.Server where
 {--
 import Env (getGridState, getGridSpec)
 

@@ -5,7 +5,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
 
-module Viz where
+module World.Viz where
 
 import Prelude hiding (zip, zipWith)
 import Diagrams.Prelude

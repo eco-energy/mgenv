@@ -13,7 +13,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 
-module Grid
+module Grid.Sample
   ( GridState(..)
   , SampledGrid(..)
   , GridSpec(..)
@@ -48,7 +48,7 @@ import Physics.Units
 
 
 import RL.MDP
-import Randomizable
+import Prob.Randomizable
 
 
 import Data.Time (NominalDiffTime, fromGregorian)
