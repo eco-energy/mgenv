@@ -120,6 +120,17 @@ packages:
     git: https://github.com/faezs/opt-expect.git
     commit: c1f91ea02a8fcb50587e7a50514363f7a3bbd5f4
 - completed:
+    name: propagators
+    version: '0'
+    git: https://github.com/ekmett/propagators.git
+    pantry-tree:
+      size: 953
+      sha256: a535b2cead7831fa11a222917504820efb9e3fab4f858dd1fc170cbbfbf5fc32
+    commit: 6de416c68d7970d734dc139079337a20b078e45c
+  original:
+    git: https://github.com/ekmett/propagators.git
+    commit: 6de416c68d7970d734dc139079337a20b078e45c
+- completed:
     hackage: geodetics-0.1.0@sha256:699c10cd8d69222b125d054cdc8e2bcee7cb0558c78fa1b4fa06b2d3ecf29f5c,2387
     pantry-tree:
       size: 1086

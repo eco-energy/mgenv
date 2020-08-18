@@ -49,6 +49,11 @@ extra-deps:
     # nix-sha256: 1a3z21n0ispcc4irggkwsclfbv87z1gb52lfafwx09n8bszr8c19
   - git: https://github.com/faezs/opt-expect.git
     commit: c1f91ea02a8fcb50587e7a50514363f7a3bbd5f4
+  - git: git@bitbucket.org:ecoenergy/lcirc.git
+    commit: 3f240d9c0ce99c3af6eb2bb4ac9afa594350cd34
+  - git: https://github.com/ekmett/propagators.git
+    commit: 6de416c68d7970d734dc139079337a20b078e45c
+    # nix-sha256: 1l2dabwjybf33rrydi5a049iyrniczpbhg6387imghmfj0ibkijr
   - geodetics-0.1.0@sha256:699c10cd8d69222b125d054cdc8e2bcee7cb0558c78fa1b4fa06b2d3ecf29f5c,2387
   - hgeometry-0.9.0.0@sha256:43043574d2ce39c543dfadb629ab3a41fe65d7bf68a1426d8d01312818bc6e4e,9702
   - hgeometry-combinatorial-0.9.0.0@sha256:a03b48302d8c542ff2ff90ba5d45f2742cc21ed1a676c8fa4870cd461a273354,7367

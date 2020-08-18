@@ -63,7 +63,9 @@ dependencies:
 - hgeometry
 - hgeometry-combinatorial
 - opt-expect
+- lCirc
 - transformers
+- newtype-generics
 
 
 ghc-options:
