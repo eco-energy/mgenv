@@ -1,8 +1,9 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveFunctor, DeriveGeneric #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveFunctor, DeriveGeneric, StandaloneDeriving #-}
 {-# LANGUAGE RankNTypes, TypeApplications, TypeOperators, ScopedTypeVariables, TypeFamilies, TypeFamilyDependencies #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances, IncoherentInstances, UndecidableInstances #-}
 {-# LANGUAGE ConstraintKinds, FlexibleContexts, MultiParamTypeClasses #-}
+{-# LANGUAGE GADTs #-}
 module Grid.Grid where
 
 import Prelude hiding ((.), id, curry, uncurry, const)
@@ -17,7 +18,9 @@ import ConCat.Free.LinearRow (L, HasL)
 
 
 import LCirc.Cospan
-import LCirc.LCirc (VI)
+import LCirc.LCirc hiding (VI)
+import LCirc.Spider
+
 
 import Algebra.Graph.Labelled
 
@@ -27,6 +30,17 @@ import Control.Newtype.Generics
 import ConCat.Misc ((:*), (:+), inNew, inNew2, R)
 
 import Data.Monoid (Sum)
+
+
+newtype VI k = VI (k :* k) deriving (Eq, Ord, Show, Generic)
+
+instance (Num k) => Frobenius (VI k)
+
+instance (Frobenius a) => Semigroup a where
+  (<>) = fmerge
+
+instance (Frobenius a) => Monoid a where
+  mempty = funit ()
 
 class Addressed a where
   asc :: a -> m Int
@@ -72,8 +86,8 @@ type VIGraph = GF (VI R) Int
 
 type EnergyGraph = GF (Sum R) Int
 
-attach :: VIGraph i oi -> VIGraph oi o -> VIGraph i o
-attach a b = b . a
+--attach :: VIGraph i oi -> VIGraph oi o -> VIGraph i o
+--attach a b = b . a
 
 -- USE THE BIFUNCTOR INSTANCE FOR GRAPH TO JUMP BETWEEN CATEGORIES
 --newtype Grid e n i o = Grid { unGrid ::  }
