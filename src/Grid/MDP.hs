@@ -8,7 +8,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
-
+{-# LANGUAGE RankNTypes #-}
 module Grid.MDP where
 
 import GHC.Generics (Generic)
@@ -17,22 +17,29 @@ import ConCat.Misc
 
 import Data.Monoid
 import qualified Algebra.Graph as G
---import qualified Algebra.Graph.Labelled as LG
 import Algebra.Graph.Class ()
 
-import Control.Monad.Trans.State.Strict ()
+import Control.Monad.Trans.State.Strict (StateT)
 import Control.Monad.Trans.Class
+import Control.Monad.Bayes.Class
 
 import Streamly
 import qualified Streamly.Prelude as S
 import qualified Streamly.Internal.Prelude as S
 
-import RL.MDP
+import Env.MonadEnv
+import RL.MDP hiding (Policy)
 
+import Physics
+
+newtype Generation = Generation R
+  deriving (Eq, Ord, Show, Generic, Num)
+
+newtype Storage v i = Storage (i -> v)
+  deriving (Generic)
 
 newtype Demand = Demand R
   deriving (Eq, Ord, Show, Generic, Num)
-
 
 data Node' = Node'
   { vB :: R
@@ -42,7 +49,6 @@ data Node' = Node'
   , iG :: R
   } deriving (Eq, Ord, Show, Generic)
 
-
 data NodeHistory = NodeH
   { stored :: R
   , consumed :: R
@@ -50,19 +56,18 @@ data NodeHistory = NodeH
   , transmitted :: R
   } deriving (Eq, Ord, Show, Generic)
 
-
 nextState :: Node' -> Gen -> Demand -> Tx -> Node'
 nextState = undefined
 
 nextHist :: NodeHistory -> Node' -> NodeHistory
 nextHist = undefined
 
-gridReward :: GridHistory -> Double
+gridReward :: HistoryG -> Double
 gridReward ks = let (Sum r) = G.foldg (0) rk (<>) (<>) ks
                     in r
   where
     rk :: NodeHistory -> Reward
-    rk x = Sum $ (stored x) +  (consumed x + generated x) + transmitted x
+    rk x = Sum $ (stored x) + (consumed x + generated x) + transmitted x
 
 --k = G.foldg (Sum 0) rk (<>)
 
@@ -72,22 +77,30 @@ newtype Tx = Tx R
 newtype Gen = Gen R
   deriving (Eq, Ord, Show, Generic, Num)
 
-type GridHistory = G.Graph NodeHistory
+type PolicyG = G.Graph (Node' :* NodeHistory -> Tx)
 
-type StateGraph = G.Graph Node'
+type HistoryG = G.Graph NodeHistory
 
-type DemandGraph = G.Graph Demand
+type StateG = G.Graph Node'
 
-type ActionGraph = G.Graph Tx
+type ActionG = G.Graph Tx
 
-type RewardGraph = G.Graph Reward
+type RewardG = G.Graph Reward
 
-type GenGraph = G.Graph Gen
+type GenG = G.Graph Gen
 
-type GraphPolicy = Policy (StateGraph :* GridHistory) ActionGraph
+type DemandG = G.Graph Demand
+
+type Skeleton = G.Graph Int
+
+newtype Policy p m s a = Policy { runPolicy :: p -> s -> m (p, a) }
+
+type GraphPolicy p m = Policy p m (StateG :* HistoryG) ActionG
+
+type GridMDP = MarkovDecisionProcess MonadEnv (StateG :* HistoryG) ActionG
 
 
-microgridMDP :: (Monad m) => m DemandGraph -> m GenGraph -> MarkovDecisionProcess m (StateGraph :* GridHistory) ActionGraph
+microgridMDP :: MonadEnv DemandG -> MonadEnv GenG -> GridMDP
 microgridMDP demand gen = MDP
   { act = \(st, hist) a -> do
       d <- lift demand
@@ -99,20 +112,23 @@ microgridMDP demand gen = MDP
   }
 
 
-dg :: m DemandGraph
-dg = undefined
+envpolicy :: ((StateG :* HistoryG) -> ActionG) -> MarkovRewardProcess MonadEnv (StateG :* HistoryG)
+envpolicy p = apply p (microgridMDP demandG genG)
 
-gg :: m GenGraph
-gg = undefined
+demandG :: (MonadSample m) => m DemandG
+demandG = undefined -- (Demand =<< normal 200 100)
 
-mgR :: (Monad m) => GraphPolicy -> MarkovRewardProcess m (StateGraph :* GridHistory)
-mgR = (flip apply) (microgridMDP dg gg) 
+genG :: (MonadSample m) => m GenG
+genG = undefined
 
-p :: GraphPolicy
+p :: GraphPolicy p m
 p = undefined
 
-run :: (MonadAsync m) => SerialT m (Reward :* (StateGraph :* GridHistory))
-run = S.runStateT r0 $ simulate (mgR p) (G.empty, G.empty)
+p' :: (StateG :* HistoryG) -> ActionG
+p' = undefined
+
+run :: SerialT MonadEnv (Reward :* (StateG :* HistoryG))
+run = S.runStateT r0 $ simulate (envpolicy p') (G.empty, G.empty)
   where
     r0 :: Reward
     r0 = Sum 0

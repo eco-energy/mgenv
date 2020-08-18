@@ -52,7 +52,7 @@ import Prob.Randomizable
 
 
 import Data.Time (NominalDiffTime, fromGregorian)
-import HH (initHHState, HHSpec(..), sampleHH, NodeId, HHState(..), hhStep)
+import Grid.HH (initHHState, HHSpec(..), sampleHH, NodeId, HHState(..), hhStep)
 import Physics.Transmission
 import qualified Data.List.NonEmpty as NE
 
