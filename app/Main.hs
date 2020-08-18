@@ -5,9 +5,9 @@
 module Main (main) where
 
 import qualified Paths_mgenv
-import Viz
-import Env
-import Grid
+import Grid.Viz
+import Grid.Env
+import Grid.Sample
 
 import Diagrams.Prelude (unLoc, names) 
 import Diagrams.Backend.SVG.CmdLine
