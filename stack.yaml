@@ -48,7 +48,7 @@ extra-deps:
       - hardware
     # nix-sha256: 1a3z21n0ispcc4irggkwsclfbv87z1gb52lfafwx09n8bszr8c19
   - git: https://github.com/faezs/opt-expect.git
-    commit: 71be809dd69f89425e1124c34878565a14b33257
+    commit: cdf9e45622d1739816b40765df23506bc74046b6
   - git: git@bitbucket.org:ecoenergy/lcirc.git
     commit: 3f240d9c0ce99c3af6eb2bb4ac9afa594350cd34
   - git: https://github.com/ekmett/propagators.git
