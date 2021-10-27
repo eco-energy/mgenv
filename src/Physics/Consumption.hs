@@ -1,17 +1,18 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric, TupleSections, FlexibleContexts, ScopedTypeVariables, TypeApplications #-}
 module Physics.Consumption
   ( ConsumptionSpec(..)
   , sampleConsumptionSpec
   , ConsumptionState(..)
   , initConsumptionState
   , initConsumptionStateM
-  , runConsumption
+  , consumptionS
   , Load(..)
   , LoadState(..)
   ) where
 
+import qualified Streamly.Prelude as S
 import Physics.Units
 import GHC.Generics (Generic)
 import Control.Monad (replicateM, liftM, replicateM, mapM)
@@ -65,15 +66,21 @@ initConsumptionStateM (ConsumptionSpec loads) = do
 initConsumptionState :: ConsumptionSpec -> ConsumptionState
 initConsumptionState (ConsumptionSpec loads) = ConsumptionState ((\l -> LoadState l False) <$> loads)
 
+consumed :: ConsumptionState -> Watts
+consumed (ConsumptionState loads) = sum $ map (power . load) $ filter isRunning loads
 
-runConsumption :: (MonadSample m) => ConsumptionState -> m (ConsumptionState, Watts)
-runConsumption (ConsumptionState loads) = do
-  let
-    updateState :: (MonadSample m) => LoadState -> m LoadState
+consumptionS :: forall t m. (S.IsStream t, S.MonadAsync m, MonadSample m)
+  => ConsumptionSpec
+  -> t m (ConsumptionState, Watts)
+consumptionS spec = fmap (\a -> (a, consumed a)) $ S.iterateM (updateC) initS
+  where
+    initS :: m (ConsumptionState)
+    initS = initConsumptionStateM spec
+    updateState :: LoadState -> m LoadState
     updateState l = do
       newState <- bernoulli ((utility . load) l)
       return l {isRunning=newState}
-  cs' <-  mapM updateState loads
-  let
-    consumed = sum $ map (power . load) $ filter isRunning loads
-  return (ConsumptionState $ cs', consumed)
+    updateC :: (ConsumptionState) -> m (ConsumptionState)
+    updateC (ConsumptionState cs) = do
+      cs' <- mapM updateState cs
+      return (ConsumptionState cs')

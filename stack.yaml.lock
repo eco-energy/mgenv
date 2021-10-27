@@ -113,12 +113,12 @@ packages:
     version: 0.1.0.0
     git: https://github.com/faezs/opt-expect.git
     pantry-tree:
-      size: 2037
-      sha256: dc828669f938b45cf1a1cd102cd309c29dc9a463d0e174954e804b382b73f1e4
-    commit: c1f91ea02a8fcb50587e7a50514363f7a3bbd5f4
+      size: 2380
+      sha256: feb06a1266e9e4ad1deb0b05feab30773ed14a7efab07b14eb4d4197231062ba
+    commit: 8f232abf68b480807bc6dcb9fc70d2049974b822
   original:
     git: https://github.com/faezs/opt-expect.git
-    commit: c1f91ea02a8fcb50587e7a50514363f7a3bbd5f4
+    commit: 8f232abf68b480807bc6dcb9fc70d2049974b822
 - completed:
     name: propagators
     version: '0'
@@ -173,19 +173,26 @@ packages:
   original:
     hackage: perfect-vector-shuffle-0.1.1.1@sha256:8656a3f1f491d1d79aba9e0a5dbb08589613202b08c7a9b92570d6bec7390093,3668
 - completed:
-    hackage: streamly-0.7.2@sha256:2dbcbd2d807b5465a281bde1a71a21f1e1e1b00be93b23083a868a07dc76de95,28286
+    hackage: streamly-0.8.0@sha256:9784c80ee1ada51477520cabc4e92a0c76a6bb265f968a188f2fce818e7398e0,19654
     pantry-tree:
-      size: 12739
-      sha256: fe4ea63b78d983f54a4a159727aa1f441b23aa1d919405de370474bdd0e6791f
+      size: 21676
+      sha256: 42c3843e920955b647a25a125c090efa72e024d1ef73d8e3ccf5710dc9217940
   original:
-    hackage: streamly-0.7.2@sha256:2dbcbd2d807b5465a281bde1a71a21f1e1e1b00be93b23083a868a07dc76de95,28286
+    hackage: streamly-0.8.0
 - completed:
     hackage: fusion-plugin-types-0.1.0@sha256:0f11bbc445ab8ae3dbbb3d5d2ea198bdb1ac020518b7f4f7579035dc89182438,1506
     pantry-tree:
       size: 378
       sha256: c349aa6c4e10a57c65ae83eb1082948642b66a97bf0c0b73e57e4d88da89f3cd
   original:
-    hackage: fusion-plugin-types-0.1.0@sha256:0f11bbc445ab8ae3dbbb3d5d2ea198bdb1ac020518b7f4f7579035dc89182438,1506
+    hackage: fusion-plugin-types-0.1.0
+- completed:
+    hackage: z3-408.2@sha256:1f8b6ccbcc6d06a6701900a09fcfcbaf86ed8a8495615710bef4da5cdb073a3f,4226
+    pantry-tree:
+      size: 1476
+      sha256: e8562391054f4e07035ab25e1c7ecfba687a46e15aefee4c588b6434dc0b93d8
+  original:
+    hackage: z3-408.2@sha256:1f8b6ccbcc6d06a6701900a09fcfcbaf86ed8a8495615710bef4da5cdb073a3f,4226
 snapshots:
 - completed:
     size: 524799

@@ -22,8 +22,10 @@ description:         Please see the README on Github at <https://github.com/faez
 dependencies:
 - base >= 4.11 && < 10
 - streamly
+- generic-lens
 - algebraic-graphs
 - time
+- dimensional
 - astro
 - extra
 - aeson
@@ -66,8 +68,9 @@ dependencies:
 - lCirc
 - transformers
 - newtype-generics
-
-
+- ghc-prim
+- sbv
+- time-compat
 ghc-options:
 - -Wall
 - -Wcompat
@@ -76,6 +79,8 @@ ghc-options:
 - -Wincomplete-uni-patterns
 - -Wpartial-fields
 - -Wredundant-constraints
+- -fplugin=ConCat.Plugin
+- -O2
 
 library:
   source-dirs: src
@@ -87,12 +92,31 @@ executables:
     dependencies:
     - mgenv
     - optparse-simple
-
+    - base
+    other-modules:
+      - Paths_mgenv    
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -fplugin=ConCat.Plugin
+    - -O2
 
+  design-exe:
+    main:                DesignApp.hs
+    source-dirs:         app
+    dependencies:
+    - mgenv
+    - optparse-simple
+    - base
+    other-modules:
+      - Paths_mgenv
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    - -fplugin=ConCat.Plugin
+    - -O2
 tests:
   mgenv-test:
     main:                Spec.hs
@@ -107,3 +131,5 @@ tests:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -fplugin=ConCat.Plugin
+    - -O2

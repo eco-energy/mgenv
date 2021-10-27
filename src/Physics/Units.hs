@@ -12,7 +12,8 @@ module Physics.Units
    ZonedTime, unZonedTime, incrementTime, mkZonedTime, dateStartToUTC, fromUTC,
    location, haversine, reverseHaversine, bearing, toRadians, toDegrees) where
 
-
+import Data.Time.Clock.POSIX.Compat (posixSecondsToUTCTime)
+import Streamly.Internal.Data.Time.Units
 import qualified Data.Astro.Coordinate as A
 import qualified Data.Astro.Types      as A
 import qualified Data.Time             as T
@@ -50,8 +51,8 @@ type Efficiency = R
 -- The Storage and Transmission streams are integratable over time
 -- The Consumption Stream is Rate Independent of the rest of the system?
 
-type Sec = Int
-type DelT = Sec
+type Sec = RelTime
+type DelT = RelTime
 
 
 newtype ZonedTime = ZonedTime { unZonedTime :: T.ZonedTime }
@@ -77,6 +78,8 @@ toUTC = T.zonedTimeToUTC . unZonedTime
 
 fromUTC :: T.UTCTime -> ZonedTime
 fromUTC = ZonedTime . (T.utcToZonedTime tz)
+
+
 
 incrementTime :: T.NominalDiffTime -> ZonedTime -> ZonedTime
 incrementTime rate p = fromUTC (T.addUTCTime rate (toUTC p))  

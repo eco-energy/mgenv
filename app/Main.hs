@@ -6,7 +6,6 @@ module Main (main) where
 
 import qualified Paths_mgenv
 import Grid.Viz
-import Grid.Env
 import Grid.Sample
 
 import Diagrams.Prelude (unLoc, names) 
@@ -24,22 +23,5 @@ main = do
   gridSpec <- sampleIO $ sampleGridSpec
   grid <- sampleIO $ generateGrid gridSpec
   let state = (initGridState grid)
-  --pPrint gridSpec
-  --pPrint grid
-  --print state
-      vizGrid = mkGridViz grid state
-      e (GridViz g) = (\(e, h, h') ->
-                         (joinTHH)
-                         (e)
-                         (uncurry householdD h)
-                         (uncurry householdD h))
-                      . head $ G.edgeList g
-      n (GridViz g) = uncurry householdD $ (\(_, h, _) -> h) . head $ G.edgeList g
-      d = gridD (0, 0) vizGrid
-      n' = n vizGrid
-      e' = e vizGrid
-  --print $ length $ G.edgeList . (\(GridState g) -> g) $ state
-  --print $ length $ G.edgeList . (\(SampledGrid g) -> g) $ grid
-  --print $ length $ n vizGrid
-  print $ names (unLoc d)
-  mainWith (unLoc $ d) -- $ 
+  pPrint gridSpec
+  pPrint grid

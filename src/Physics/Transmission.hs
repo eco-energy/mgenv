@@ -1,20 +1,26 @@
-{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NamedFieldPuns, TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE RankNTypes, KindSignatures #-}
+{-# LANGUAGE FlexibleContexts, TypeApplications, ScopedTypeVariables, TypeOperators #-}
 module Physics.Transmission
   ( TransmissionSpec(..)
   , resistance
   , TransmissionState(..)
-  , initTransmissionState
+  , Transmission(..)
   , sampleTransmissionSpec
-  , runTransmission
+  , sendTx
+  , recieveTx
   ) where
 
+import Control.Applicative
 import Physics.Units
 import GHC.Generics (Generic)
 import Prob.Randomizable
-
-
+import qualified Streamly.Prelude as S
+import Streamly.Internal.Data.Pipe (Pipe(..))
+import Streamly.Internal.Data.Pipe as P
+import ConCat.Isomorphism
 
 data TransmissionSpec = TransmissionSpec
   { wireLength :: Meters
@@ -53,32 +59,54 @@ sampleTransmissionSpec = do
     crossSection d = pi * (d /2)**2
 
 
-data Transmission = Transmission
-  { v0 :: V
-  , i0 :: Amp
-  , v1 :: V
-  } deriving (Eq, Ord, Show, Generic)
+type VI v i = (v, i)
+type VIDel v i = VI v i <-> (v, v, i)
 
-runTransmission :: TransmissionSpec -> V -> Amp -> (Watts, Watts)
-runTransmission t@TransmissionSpec{} v i = (outP, loss)
+
+viDel :: (Num v, Num i) => VIDel v i
+viDel =  fwd :<-> rev 
   where
-    loss = (i**2) * resistance t
-    outP = (v*i) - loss
+    fwd = \(v, i) -> (v - 0, 0, i)
+    rev = \(v, v', i) -> (v - v', i)
 
-data TransmissionState = TransmissionState
-  { power :: Watts } deriving (Eq, Show, Ord, Generic)
+optimiseVI :: p -> TransmissionSpec -> VI v i
+optimiseVI w tx = undefined
+  where
+    r = resistance tx 
+
+type PowerIso p v i = p <-> (VI v i)
+
+powerIso :: forall p v i. (Num p, Fractional p, RealFrac p, RealFrac v, RealFrac i)
+  => TransmissionSpec -> PowerIso p v i
+powerIso ts = (fwd :<-> rev)
+  where
+    fwd w = optimiseVI w ts
+    rev :: (v, i) -> p
+    rev (v, i) = (realToFrac v) * (realToFrac i)
 
 
--- There should be a parallel Semigroup and a sequential semigroup,
--- the former should be invariant wrt the voltage and sum the current and vice versa for the latter
--- right now lets assume that the composition is parallel
-instance Semigroup TransmissionState where
-  (TransmissionState p1) <> (TransmissionState p2) = TransmissionState $ p1 + p2
-  
 
-instance Monoid TransmissionState where
-  mempty = initTransmissionState
-  
+newtype Transmission = Transmission
+  { unTransmission :: PowerIso Watts V Amp
+  } deriving (Generic)
 
-initTransmissionState :: TransmissionState
-initTransmissionState = TransmissionState 0
+sendTx :: (Monad m) => Transmission  -> Pipe m Watts (V, Amp)
+sendTx = P.map . isoFwd . unTransmission
+
+recieveTx :: (Monad m) => Transmission  -> Pipe m (V, Amp) Watts
+recieveTx = P.map . isoRev . unTransmission
+
+-- runTransmission :: forall t m. (S.IsStream t, S.MonadAsync m)
+--   => TransmissionSpec -> Transmission m a -> t m a
+-- runTransmission t Transmission{v0, i0, v1} = S.zipWith (,) outP loss
+--   where
+--     v :: t m V
+--     v = liftA2 (-) v0 v1
+--     loss :: t m Watts
+--     loss = fmap (\i -> i**2 * (resistance t)) i0
+--     outP :: t m Watts
+--     outP = (S.zipWith (-) (S.zipWith (*) v i0) loss)
+
+newtype TransmissionState = TransmissionState (TransmissionSpec, Transmission)
+  deriving (Generic)
+

@@ -1,25 +1,38 @@
-{ # Fetch the latest haskell.nix and import its default.nix
-  haskellNix ? import (builtins.fetchTarball "https://github.com/input-output-hk/haskell.nix/archive/master.tar.gz") {}
+{ system ? builtins.currentSystem
+, crossSystem ? null
+, config ? {}
+, sourcesOverride ? {}
+# , overlays ? []
+}:
 
-# haskell.nix provides access to the nixpkgs pins which are used by our CI,
-# hence you will be more likely to get cache hits when using these.
-# But you can also just use your own, e.g. '<nixpkgs>'.
-, nixpkgsSrc ? haskellNix.sources.nixpkgs-2003
+let
+  sources = import ./nix/sources.nix { inherit pkgs; }
+    // sourcesOverride;
+  iohKNix = import sources.iohk-nix {};
+  haskellNix = import sources."haskell.nix" {
+    inherit system;
+    sourcesOverride = {
+      hackage = sources.hackage-nix;
+      stackage = sources.stackage-nix;
+    };
+  };
+  # use our own nixpkgs if it exist in our sources,
+  # otherwise use iohkNix default nixpkgs.
+  nixpkgs = haskellNix.sources.nixpkgs-2009 or
+    (builtins.trace "Using IOHK default nixpkgs" iohKNix.nixpkgs);
 
-# haskell.nix provides some arguments to be passed to nixpkgs, including some
-# patches and also the haskell.nix functionality itself as an overlay.
-, nixpkgsArgs ? haskellNix.nixpkgsArgs
-
-# import nixpkgs with overlays
-, pkgs ? import nixpkgsSrc nixpkgsArgs
-}: pkgs.haskell-nix.project {
+  pkgs = import nixpkgs (haskellNix.nixpkgsArgs // {
+    inherit system crossSystem; # overlays;
+  });
+in
+pkgs.haskell-nix.project {
   # 'cleanGit' cleans a source directory based on the files known by git
   src = pkgs.haskell-nix.haskellLib.cleanGit {
     name = "mgenv";
     src = ./.;
   };
   projectFileName = "stack.yaml";
-  stack-sha256="166491vz810yrhgk09yjk3yfznmfmr8nkchg24cr5p5zxhvq3nfk";
-  materialized=./mgenv.materialized;
+  #stack-sha256="166491vz810yrhgk09yjk3yfznmfmr8nkchg24cr5p5zxhvq3nfk";
+  #materialized=./mgenv.materialized;
 }
 

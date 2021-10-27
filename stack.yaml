@@ -48,9 +48,9 @@ extra-deps:
       - hardware
     # nix-sha256: 1a3z21n0ispcc4irggkwsclfbv87z1gb52lfafwx09n8bszr8c19
   - git: https://github.com/faezs/opt-expect.git
-    commit: cdf9e45622d1739816b40765df23506bc74046b6
+    commit: 8f232abf68b480807bc6dcb9fc70d2049974b822
   - git: git@bitbucket.org:ecoenergy/lcirc.git
-    commit: 3f240d9c0ce99c3af6eb2bb4ac9afa594350cd34
+    commit: daccc2195858dd6b9a975703bcb6384929f7a61a
   - git: https://github.com/ekmett/propagators.git
     commit: 6de416c68d7970d734dc139079337a20b078e45c
     # nix-sha256: 1l2dabwjybf33rrydi5a049iyrniczpbhg6387imghmfj0ibkijr
@@ -60,15 +60,21 @@ extra-deps:
   - monad-bayes-0.1.1.0@sha256:57d96f530a37a1c8efed0830c7f2bcf86da05d0d53324aebdd5b5aa165d72829,5132
   - fusion-plugin-0.2.1@sha256:f72d7393d2c39909050cae46173e0218bf533a899be05b448ae55f9d4a81be9c,2349
   - perfect-vector-shuffle-0.1.1.1@sha256:8656a3f1f491d1d79aba9e0a5dbb08589613202b08c7a9b92570d6bec7390093,3668
-  - streamly-0.7.2@sha256:2dbcbd2d807b5465a281bde1a71a21f1e1e1b00be93b23083a868a07dc76de95,28286
-  - fusion-plugin-types-0.1.0@sha256:0f11bbc445ab8ae3dbbb3d5d2ea198bdb1ac020518b7f4f7579035dc89182438,1506
+  - streamly-0.8.0
+  - fusion-plugin-types-0.1.0
+  - z3-408.2@sha256:1f8b6ccbcc6d06a6701900a09fcfcbaf86ed8a8495615710bef4da5cdb073a3f,4226
 
   
 #
 # extra-deps: []
 
 # Override default flag values for local packages and extra-deps
-# flags: {}
+# flags: # Override default flag values for local packages and extra-deps
+
+flags:
+  concat-examples:
+    smt: False
+
 
 # Extra package databases containing global packages
 # extra-package-dbs: []

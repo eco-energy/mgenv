@@ -23,8 +23,10 @@ import qualified Data.Set as Set
 euclideanMST :: (Ord r, Fractional r) => NE.NonEmpty (Point 2 r :+ p) -> Tree (Point 2 r :+ p)
 euclideanMST pts = (\v -> g^.locationOf v :+ g^.dataOf v) <$> t
   where
-    g = withEdgeDistances squaredEuclideanDist . toPlaneGraph (Proxy :: Proxy MSTW)
-      . delaunayTriangulation $ pts
+    g = withEdgeDistances squaredEuclideanDist
+        . toPlaneGraph (Proxy :: Proxy MSTW)
+        . delaunayTriangulation
+        $ pts
     t = mst $ g^.graph
 
 
@@ -51,16 +53,22 @@ branches (Node x ts) = map (x:) (concatMap branches ts)
 
 
 positiveGridPoints :: [(Meters, BearingDeg)] -> [EuclideanC]
-positiveGridPoints xs = shift cs
-  where
-    shift :: [(Meters, Meters)] -> [(Meters, Meters)]
-    shift ps = zip (map scaleX ps) (map scaleY ps)
-    scaleX :: (Meters, Meters) -> Meters
-    scaleX = (+rightwards) . fst
-    scaleY :: (Meters, Meters) -> Meters
-    scaleY = (+upwards) . snd
-    rightwards = abs (foldl min 0 $ map fst cs)
-    upwards = abs (foldl min 0 $ map snd cs)
-    cs = map toCartesian xs
-    toCartesian :: (Meters, BearingDeg) -> (Meters, Meters)
-    toCartesian (r, th) = (r*sin (toRadians th), r * cos (toRadians th))
+positiveGridPoints = shift . map toCartesian
+
+shift :: [(Meters, Meters)] -> [(Meters, Meters)]
+shift ps = zip (map (scaleX (rightwards ps)) ps) (map (scaleY (upwards ps)) ps)
+
+rightwards :: (Functor f, Foldable f) => f (EuclideanC) -> Meters
+rightwards = abs . foldl min 0 . fmap fst
+
+upwards :: (Functor f, Foldable f) => f (EuclideanC) -> Meters
+upwards = abs . foldl min 0 . fmap snd
+
+scaleX :: Meters -> (Meters, Meters) -> Meters
+scaleX right = (+right) . fst
+
+scaleY :: Meters -> (Meters, Meters) -> Meters
+scaleY up = (+up) . snd
+
+toCartesian :: (Meters, BearingDeg) -> (Meters, Meters)
+toCartesian (r, th) = (r*sin (toRadians th), r * cos (toRadians th))

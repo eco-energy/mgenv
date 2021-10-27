@@ -1,16 +1,25 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE DataKinds #-}
-module Physics.Storage (BatteryState(..), BatterySpec(..), sampleBatterySpec, stateNext, initBatteryState, batteryVoltage, Storage, energyStored) where
+{-# LANGUAGE DataKinds, MultiParamTypeClasses, RankNTypes, FlexibleContexts, ScopedTypeVariables, TypeApplications #-}
+module Physics.Storage (BatteryState(..), BatterySpec(..), sampleBatterySpec, stateNext, initBatteryState, batteryVoltage, Storage, energyStored, batteryS) where
 
+--import Prelude hiding ((*))
 import Data.Tuple.Extra ()
 import GHC.Generics hiding (R)
 import Physics.Units
 import Control.Monad.Bayes.Class
 import Control.Monad (liftM)
+import qualified Numeric.Units.Dimensional.Prelude as D
+import Numeric.Units.Dimensional.NonSI
 
-import Prob.Randomizable
+import qualified Streamly.Prelude as S
+import Streamly.Internal.Data.Time.Units
+import Streamly.Internal.Data.Time.TimeSpec
+import Streamly.Internal.Data.Time
+import qualified Streamly.Internal.Data.Unfold as UF
+import qualified Streamly.Internal.Data.Pipe as Pipe
+
 {--
 In terms of the environment design, what the RL controller should see
 must be just an estimate of the battery energy state in WattHours.
@@ -39,6 +48,7 @@ Would be nice to have this incorporated in the charge and discharge functions.
 
 --}
 
+
 class Storage a where
   chargePower :: a -> Watts
   dischargePower :: a -> Watts
@@ -54,6 +64,8 @@ data BatteryObservation = BatteryObservation
                           , termV_t :: V
                           , duration :: DelT }
                         deriving (Eq, Show, Generic)
+
+newtype BatteryS t m = BatteryS (BatterySpec, t m BatteryState)
 
 data BatteryState = BatteryState
   { v_t :: V
@@ -78,9 +90,6 @@ data BatterySpec = BatterySpec
   , iChg :: Amp -- same as above
   } deriving (Eq, Show, Generic)
 
-
-instance Randomizable BatterySpec where
-  sampleThis = sampleBatterySpec
 
 data Battery = Battery
                { params :: BatterySpec
@@ -113,12 +122,12 @@ sampleBatterySpec = do
   return $ batterySpec eff cap qMin qMax vNom vMin vMax dischargeDeltaV dischargeRefCurr chargeDeltaV chargeRefCurr
 
 
-stateNext :: BatterySpec -> BatteryState -> Amp -> DelT -> BatteryState
-stateNext BatterySpec {..} BatteryState {..} current del_t = batteryState vt_next ztNext etNext dpNext cpNext
+stateNext :: BatterySpec -> DelT -> Amp -> BatteryState -> BatteryState
+stateNext BatterySpec {..} del_t current BatteryState {..} = batteryState vt_next ztNext etNext dpNext cpNext
   where
-    vt_next = v_t -- wrong
+    vt_next = v_t * (ztNext / z_t)
     ztNext :: SoC
-    ztNext = z_t - (dt / (ahToColoumb totalChargeCapacity))  - (ce * current)
+    ztNext = z_t - (dt' / (ahToColoumb totalChargeCapacity))  - (ce * current)
       where
         ce = if (current <= 0) then fst coloumbicEff else snd coloumbicEff
     etNext :: WattHours
@@ -132,7 +141,12 @@ stateNext BatterySpec {..} BatteryState {..} current del_t = batteryState vt_nex
     rChg :: Ohm
     rChg = internalResistance delVChgAtI iChg
     ocV = vNominal
-    dt = fromIntegral del_t
+    dt' = fromIntegral dt
+    dt = sec . fromRelTime @TimeSpec $ del_t
+
+
+batteryS :: forall t m. (S.IsStream t, S.MonadAsync m) => BatterySpec -> t m (DelT, Amp) -> t m BatteryState
+batteryS spec current = S.postscanl' (\bs (dt, cur) -> stateNext spec dt cur bs) initBatteryState current
 
 batteryVoltage :: BatteryState -> V
 batteryVoltage = v_t
@@ -155,7 +169,7 @@ dischargeCurrentLimit ocV vMin dischargeResistance = (ocV - vMin) / dischargeRes
 
 -- horrible, get a better model
 ocvAtSoC :: BatterySpec -> SoC -> V
-ocvAtSoC BatterySpec {..} soc = vNominal
+ocvAtSoC BatterySpec{..} soc = vNominal * (soc / 100)
 
 power :: V -> Amp -> Watts
 power v i = v * i
