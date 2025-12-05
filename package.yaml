@@ -71,6 +71,8 @@ dependencies:
 - ghc-prim
 - sbv
 - time-compat
+- attoparsec
+- stm
 ghc-options:
 - -Wall
 - -Wcompat
