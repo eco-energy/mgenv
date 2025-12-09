@@ -106,8 +106,10 @@ batteryStepKernel
       -- State of charge update
       ztNext = zt - (delT / ahToColoumb totalCap) - (ce * current)
 
-      -- Voltage update (simplified linear model)
-      vtNext = vNom * (ztNext / 100)
+      -- Voltage update (proportional to SoC change, matching CPU physics)
+      -- v(t+1) = v(t) * (SoC(t+1) / SoC(t))
+      -- Guard against division by zero when SoC is 0
+      vtNext = cond (zt A./= 0) (vt * (ztNext / zt)) vNom
 
       -- Energy stored
       etNext = storedEnergyKernel totalCap vNom ztNext qMin
