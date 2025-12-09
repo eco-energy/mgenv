@@ -40,6 +40,13 @@ module CUDA.Kernels
   , vecExtractObsKernel
   , vecCheckDoneKernel
   , vecApplyActionsKernel
+    -- * Graph Message Passing Kernels
+  , gatherNodeFeatures
+  , scatterAddMessages
+  , computePowerFlowMessages
+  , messagePassingRound
+  , vecMessagePassingKernel
+  , vecApplyPowerExchange
     -- * Utility Kernels
   , initBatteryStatesKernel
   , initHHStatesKernel
@@ -562,3 +569,147 @@ vecApplyActionsKernel
 vecApplyActionsKernel actions = A.map clipAction actions
   where
     clipAction a = A.max (-1) (A.min 1 a)
+
+--------------------------------------------------------------------------------
+-- Graph Message Passing Kernels
+-- These implement GNN-style scatter/gather for power flow on grid topology
+--------------------------------------------------------------------------------
+
+-- | Gather node features from neighbors
+-- Given edge list (src, dst) and node features, gather src features for each edge
+gatherNodeFeatures
+  :: Acc (Vector Int)               -- ^ Source node indices: [num_edges]
+  -> Acc (Vector GR)                -- ^ Node features: [num_nodes]
+  -> Acc (Vector GR)                -- ^ Edge features (gathered from src): [num_edges]
+gatherNodeFeatures srcIndices nodeFeatures = gather srcIndices nodeFeatures
+
+-- | Scatter-add edge messages to destination nodes
+-- Aggregates messages from all incoming edges at each node
+scatterAddMessages
+  :: Exp Int                        -- ^ Number of nodes
+  -> Acc (Vector Int)               -- ^ Destination node indices: [num_edges]
+  -> Acc (Vector GR)                -- ^ Edge messages: [num_edges]
+  -> Acc (Vector GR)                -- ^ Aggregated messages at nodes: [num_nodes]
+scatterAddMessages numNodes dstIndices edgeMessages =
+  permute (+) defaults indexMap edgeMessages
+  where
+    defaults = fill (index1 numNodes) 0
+    indexMap ix = Just_ (index1 (dstIndices A.! ix))
+
+-- | Compute power flow messages along edges
+-- Message = transmission efficiency * (src_surplus - dst_deficit)
+computePowerFlowMessages
+  :: Acc (Vector Int)               -- ^ Source indices: [num_edges]
+  -> Acc (Vector Int)               -- ^ Destination indices: [num_edges]
+  -> Acc (Vector GR)                -- ^ Edge weights (transmission efficiency): [num_edges]
+  -> Acc (Vector GR)                -- ^ Node surplus/deficit: [num_nodes]
+  -> Acc (Vector GR)                -- ^ Power flow per edge: [num_edges]
+computePowerFlowMessages srcIdx dstIdx weights nodePower =
+  A.zipWith3 computeFlow weights srcPower dstPower
+  where
+    srcPower = gather srcIdx nodePower
+    dstPower = gather dstIdx nodePower
+    -- Power flows from surplus to deficit
+    computeFlow w pSrc pDst =
+      let surplus = pSrc - pDst
+      in cond (surplus A.> 0) (w * surplus * 0.5) 0
+
+-- | Single message passing round for grid power balancing
+-- Returns updated power at each node after exchange
+messagePassingRound
+  :: Exp Int                        -- ^ Number of nodes
+  -> Acc (Vector Int)               -- ^ Edge sources: [num_edges]
+  -> Acc (Vector Int)               -- ^ Edge destinations: [num_edges]
+  -> Acc (Vector GR)                -- ^ Edge weights: [num_edges]
+  -> Acc (Vector GR)                -- ^ Current node power: [num_nodes]
+  -> Acc (Vector GR)                -- ^ Updated node power: [num_nodes]
+messagePassingRound numNodes srcIdx dstIdx weights nodePower =
+  A.zipWith (+) nodePower netFlow
+  where
+    -- Compute flow on each edge
+    edgeFlows = computePowerFlowMessages srcIdx dstIdx weights nodePower
+    -- Incoming power (positive)
+    incoming = scatterAddMessages numNodes dstIdx edgeFlows
+    -- Outgoing power (negative)
+    outgoing = scatterAddMessages numNodes srcIdx edgeFlows
+    netFlow = A.zipWith (-) incoming outgoing
+
+-- | Vectorized message passing for multiple environments
+-- Edge topology is shared across envs, but node states differ
+vecMessagePassingKernel
+  :: Exp Int                        -- ^ Number of nodes per env
+  -> Acc (Vector Int)               -- ^ Edge sources: [num_edges] (shared topology)
+  -> Acc (Vector Int)               -- ^ Edge destinations: [num_edges]
+  -> Acc (Vector GR)                -- ^ Edge weights: [num_edges]
+  -> Acc (Array DIM2 GR)            -- ^ Node power: [num_envs, num_nodes]
+  -> Acc (Array DIM2 GR)            -- ^ Updated node power: [num_envs, num_nodes]
+vecMessagePassingKernel numNodes srcIdx dstIdx weights nodePowers =
+  A.generate (A.shape nodePowers) updateNode
+  where
+    Z :. numEnvs :. _ = unlift (A.shape nodePowers) :: Z :. Exp Int :. Exp Int
+    numEdges = A.length srcIdx
+
+    updateNode ix =
+      let
+        Z :. envIdx :. nodeIdx = unlift ix :: Z :. Exp Int :. Exp Int
+        currentPower = nodePowers A.! ix
+
+        -- Compute net flow for this specific node
+        -- Sum incoming - outgoing across all edges touching this node
+        netFlow = computeNetFlowForNode envIdx nodeIdx
+      in
+        currentPower + netFlow
+
+    -- Compute net power flow for a specific node in a specific environment
+    computeNetFlowForNode envIdx nodeIdx =
+      let
+        -- For each edge, compute contribution to this node
+        edgeContribs = A.generate (index1 numEdges) (edgeContribToNode envIdx nodeIdx)
+      in
+        the $ A.fold (+) 0 edgeContribs
+
+    edgeContribToNode envIdx nodeIdx edgeIx =
+      let
+        Z :. e = unlift edgeIx :: Z :. Exp Int
+        src = srcIdx A.! edgeIx
+        dst = dstIdx A.! edgeIx
+        w = weights A.! edgeIx
+
+        srcPower = nodePowers A.! index2 envIdx src
+        dstPower = nodePowers A.! index2 envIdx dst
+
+        surplus = srcPower - dstPower
+        flow = cond (surplus A.> 0) (w * surplus * 0.5) 0
+
+        -- This node receives flow if it's dst, sends if it's src
+        contrib = cond (nodeIdx A.== dst) flow $
+                  cond (nodeIdx A.== src) (-flow) 0
+      in
+        contrib
+
+-- | Apply message passing to update household states with power exchange
+vecApplyPowerExchange
+  :: Exp Int                        -- ^ Number of nodes
+  -> Acc (Vector Int)               -- ^ Edge sources
+  -> Acc (Vector Int)               -- ^ Edge destinations
+  -> Acc (Vector GR)                -- ^ Edge weights
+  -> Acc (Array DIM2 GPUHHState)    -- ^ Current states: [num_envs, num_nodes]
+  -> Acc (Array DIM2 GPUHHState)    -- ^ States with updated txIn/txOut
+vecApplyPowerExchange numNodes srcIdx dstIdx weights states =
+  A.zipWith updateState states netFlows
+  where
+    -- Extract net power (generation - consumption) from each node
+    nodePowers = A.map extractNetPower states
+    extractNetPower (GPUHHState_ _ gen con _ _) = gen - con
+
+    -- Run message passing
+    updatedPowers = vecMessagePassingKernel numNodes srcIdx dstIdx weights nodePowers
+    netFlows = A.zipWith (-) updatedPowers nodePowers
+
+    -- Update txIn/txOut based on net flow
+    updateState (GPUHHState_ batt gen con _ _) netFlow =
+      let
+        txIn' = cond (netFlow A.> 0) netFlow 0
+        txOut' = cond (netFlow A.< 0) (A.abs netFlow) 0
+      in
+        GPUHHState_ batt gen con txIn' txOut'
