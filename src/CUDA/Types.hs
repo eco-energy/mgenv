@@ -10,7 +10,16 @@
 {-# LANGUAGE PatternSynonyms #-}
 
 -- | GPU-compatible data types for parallel CUDA simulations
--- This module defines data types that can be efficiently transferred to and processed on GPU
+--
+-- This module defines data types that can be efficiently transferred to and
+-- processed on GPU. It supports both single-environment and vectorized
+-- (PufferLib-style) batched environment execution.
+--
+-- = Architecture
+--
+-- The vectorized types use 2D arrays with shape @[num_envs, num_nodes]@ to enable
+-- massive parallelism across both environments and nodes simultaneously.
+--
 module CUDA.Types
   ( -- * GPU-Compatible Scalar Types
     GR
@@ -35,9 +44,15 @@ module CUDA.Types
   , GPUHHState(..)
   , pattern GPUHHSpec_
   , pattern GPUHHState_
-    -- * GPU Grid Types
+    -- * GPU Grid Types (Single Environment)
   , GPUGridSpec(..)
   , GPUGridState(..)
+    -- * Vectorized Environment Types (PufferLib-style)
+  , VecEnvConfig(..)
+  , VecEnvState(..)
+  , StepResult(..)
+  , ObsDim
+  , ActionDim
     -- * Simulation Parameters
   , GPUSimParams(..)
   , pattern GPUSimParams_
@@ -220,3 +235,61 @@ class ToGPU cpu gpu where
 -- | Type class for converting GPU types back to CPU types
 class FromGPU gpu cpu where
   fromGPU :: gpu -> cpu
+
+--------------------------------------------------------------------------------
+-- Vectorized Environment Types (PufferLib-style)
+--------------------------------------------------------------------------------
+
+-- | Observation dimension - flattened observation size per node
+type ObsDim = Int
+
+-- | Action dimension - action size per node
+type ActionDim = Int
+
+-- | Configuration for vectorized environment
+-- Specifies the parallelism dimensions and environment structure
+data VecEnvConfig = VecEnvConfig
+  { vecNumEnvs        :: !Int              -- ^ Number of parallel environments
+  , vecNumNodes       :: !Int              -- ^ Nodes per environment (grid size)
+  , vecObsDim         :: !Int              -- ^ Observation dimension per node
+  , vecActionDim      :: !Int              -- ^ Action dimension per node
+  , vecMaxEpisodeLen  :: !Int              -- ^ Maximum episode length (steps)
+  , vecAutoReset      :: !Bool             -- ^ Auto-reset done environments
+  , vecSharedTopology :: !Bool             -- ^ All envs share same grid topology
+  } deriving (Eq, Show, Generic)
+
+-- | Vectorized environment state
+-- All arrays have shape [num_envs, ...] for batched processing
+data VecEnvState = VecEnvState
+  { -- | Household states: [num_envs, num_nodes]
+    vesStates         :: !(Array DIM2 GPUHHState)
+    -- | Household specs: [num_envs, num_nodes] or [1, num_nodes] if shared
+  , vesSpecs          :: !(Array DIM2 GPUHHSpec)
+    -- | Simulation time per env: [num_envs]
+  , vesTimes          :: !(Vector GR)
+    -- | Episode step count per env: [num_envs]
+  , vesStepCounts     :: !(Vector Int)
+    -- | Done flags per env: [num_envs] (1 = done, 0 = not done)
+  , vesDones          :: !(Vector Int)
+    -- | Truncated flags per env: [num_envs] (1 = truncated, 0 = not)
+  , vesTruncated      :: !(Vector Int)
+    -- | Cumulative reward per env: [num_envs]
+  , vesCumulativeReward :: !(Vector GR)
+    -- | Simulation parameters per env: [num_envs]
+  , vesSimParams      :: !(Vector GPUSimParams)
+  } deriving (Show)
+
+-- | Result of a vectorized step operation
+-- Standard RL interface: (obs, reward, done, truncated, info)
+data StepResult = StepResult
+  { -- | Observations: [num_envs, obs_dim]
+    srObs             :: !(Array DIM2 GR)
+    -- | Rewards: [num_envs]
+  , srRewards         :: !(Vector GR)
+    -- | Done flags: [num_envs]
+  , srDones           :: !(Vector Int)
+    -- | Truncated flags: [num_envs]
+  , srTruncated       :: !(Vector Int)
+    -- | Per-node rewards for detailed analysis: [num_envs, num_nodes]
+  , srNodeRewards     :: !(Array DIM2 GR)
+  } deriving (Show)

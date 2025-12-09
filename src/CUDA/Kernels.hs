@@ -5,7 +5,16 @@
 {-# LANGUAGE RebindableSyntax #-}
 
 -- | GPU computation kernels for parallel microgrid simulation
--- This module contains the core CUDA kernels that execute on the GPU
+--
+-- This module contains the core CUDA kernels that execute on the GPU.
+-- It provides both single-environment kernels and vectorized (batched)
+-- kernels for PufferLib-style parallel RL training.
+--
+-- = Vectorized Kernels
+--
+-- The @vec*@ kernels operate on 2D arrays with shape @[num_envs, num_nodes]@,
+-- enabling massive parallelism across both environment instances and grid nodes.
+--
 module CUDA.Kernels
   ( -- * Battery Kernels
     batteryStateKernel
@@ -20,9 +29,17 @@ module CUDA.Kernels
   , updateLoadStatesKernel
     -- * Household Kernels
   , householdStepKernel
-    -- * Grid-level Kernels
+    -- * Grid-level Kernels (Single Env)
   , gridStepKernel
   , aggregateRewardsKernel
+    -- * Vectorized Kernels (PufferLib-style)
+  , vecGridStepKernel
+  , vecInitStatesKernel
+  , vecResetKernel
+  , vecComputeRewardsKernel
+  , vecExtractObsKernel
+  , vecCheckDoneKernel
+  , vecApplyActionsKernel
     -- * Utility Kernels
   , initBatteryStatesKernel
   , initHHStatesKernel
@@ -332,3 +349,214 @@ initHHStatesKernel specs = A.map initHHState specs
         initialE = totalCap * vNom * 0.5
       in
         GPUBatteryState_ initialV initialSoC initialE 0 0
+
+--------------------------------------------------------------------------------
+-- Vectorized Kernels (PufferLib-style)
+-- These operate on [num_envs, num_nodes] shaped arrays
+--------------------------------------------------------------------------------
+
+-- | Vectorized grid step kernel
+-- Processes ALL environments × ALL nodes in a single kernel launch
+-- Shape: states [num_envs, num_nodes], params [num_envs]
+vecGridStepKernel
+  :: Acc (Array DIM2 GPUHHSpec)     -- ^ Specs: [num_envs, num_nodes]
+  -> Acc (Vector GPUSimParams)      -- ^ Params: [num_envs]
+  -> Acc (Array DIM2 GPUHHState)    -- ^ States: [num_envs, num_nodes]
+  -> Acc (Array DIM2 GR)            -- ^ Actions: [num_envs, num_nodes] (e.g., discharge rates)
+  -> Acc (Array DIM2 GPUHHState)    -- ^ Next states: [num_envs, num_nodes]
+vecGridStepKernel specs params states actions =
+  A.generate (A.shape states) stepAt
+  where
+    stepAt ix =
+      let
+        Z :. envIdx :. nodeIdx = unlift ix :: Z :. Exp Int :. Exp Int
+        spec = specs A.! ix
+        state = states A.! ix
+        action = actions A.! ix
+        param = params A.! (A.index1 envIdx)
+      in
+        householdStepWithAction spec param state action
+
+-- | Household step with action input
+-- Action modifies the battery charge/discharge behavior
+householdStepWithAction
+  :: Exp GPUHHSpec
+  -> Exp GPUSimParams
+  -> Exp GPUHHState
+  -> Exp GR                        -- ^ Action: battery discharge rate [-1, 1]
+  -> Exp GPUHHState
+householdStepWithAction
+  (GPUHHSpec_ nodeId lat lon gridX gridY battery pv)
+  simParams@(GPUSimParams_ deltaT ambTemp windSpeed dayOfYear hourOfDay)
+  (GPUHHState_ battState _ consumption txIn txOut)
+  action =
+    let
+      -- PV generation
+      generation = pvGenerationKernel pv simParams lat lon
+
+      -- Action scales battery usage: -1 = max charge, +1 = max discharge
+      battVoltage = case battState of
+        GPUBatteryState_ v _ _ _ _ -> v
+      maxDischargePower = case battState of
+        GPUBatteryState_ _ _ _ _ dp -> dp
+      maxChargePower = case battState of
+        GPUBatteryState_ _ _ _ cp _ -> cp
+
+      -- Apply action to determine battery current
+      actionPower = cond (action A.>= 0)
+        (action * maxDischargePower)
+        (action * maxChargePower)
+
+      batteryCurrent = cond (battVoltage A.> 0)
+        (actionPower / battVoltage)
+        0
+
+      -- Battery state update
+      newBattState = batteryStepKernel battery deltaT batteryCurrent battState
+
+      -- Net power balance
+      batteryPowerOut = actionPower
+      netPower = generation - consumption - batteryPowerOut
+
+      -- Grid exchange based on net power
+      newTxIn = cond (netPower A.< 0) (A.abs netPower) 0
+      newTxOut = cond (netPower A.> 0) netPower 0
+    in
+      GPUHHState_ newBattState generation consumption newTxIn newTxOut
+
+-- | Initialize states for all environments
+-- Shape: [num_envs, num_nodes]
+vecInitStatesKernel
+  :: Acc (Array DIM2 GPUHHSpec)     -- ^ Specs: [num_envs, num_nodes]
+  -> Acc (Array DIM2 GPUHHState)    -- ^ Initial states: [num_envs, num_nodes]
+vecInitStatesKernel specs = A.map initHHState specs
+  where
+    initHHState (GPUHHSpec_ _ _ _ _ _ battery _) =
+      let
+        initBatt = initBattState battery
+      in
+        GPUHHState_ initBatt 0 0 0 0
+    initBattState (GPUBatterySpec_ _ _ totalCap _ _ vNom _ _ _ _ _ _) =
+      let
+        initialSoC = 50.0
+        initialV = vNom * (initialSoC / 100)
+        initialE = totalCap * vNom * 0.5
+      in
+        GPUBatteryState_ initialV initialSoC initialE 0 0
+
+-- | Reset done environments while preserving non-done ones
+-- This is the auto-reset logic for vectorized envs
+vecResetKernel
+  :: Acc (Array DIM2 GPUHHSpec)     -- ^ Specs: [num_envs, num_nodes]
+  -> Acc (Vector Int)               -- ^ Done flags: [num_envs] (1 = reset this env)
+  -> Acc (Array DIM2 GPUHHState)    -- ^ Current states: [num_envs, num_nodes]
+  -> Acc (Array DIM2 GPUHHState)    -- ^ States after reset: [num_envs, num_nodes]
+vecResetKernel specs dones states =
+  A.generate (A.shape states) resetAt
+  where
+    resetAt ix =
+      let
+        Z :. envIdx :. nodeIdx = unlift ix :: Z :. Exp Int :. Exp Int
+        isDone = dones A.! (A.index1 envIdx)
+        currentState = states A.! ix
+        spec = specs A.! ix
+        freshState = initHHState spec
+      in
+        cond (isDone A.== 1) freshState currentState
+
+    initHHState (GPUHHSpec_ _ _ _ _ _ battery _) =
+      GPUHHState_ (initBattState battery) 0 0 0 0
+
+    initBattState (GPUBatterySpec_ _ _ totalCap _ _ vNom _ _ _ _ _ _) =
+      let
+        initialSoC = 50.0
+        initialV = vNom * (initialSoC / 100)
+        initialE = totalCap * vNom * 0.5
+      in
+        GPUBatteryState_ initialV initialSoC initialE 0 0
+
+-- | Compute rewards for all environments
+-- Returns per-env reward (summed across nodes) and per-node rewards
+vecComputeRewardsKernel
+  :: Acc (Array DIM2 GPUHHState)    -- ^ States: [num_envs, num_nodes]
+  -> ( Acc (Vector GR)              -- ^ Per-env rewards: [num_envs]
+     , Acc (Array DIM2 GR)          -- ^ Per-node rewards: [num_envs, num_nodes]
+     )
+vecComputeRewardsKernel states = (envRewards, nodeRewards)
+  where
+    -- Per-node rewards
+    nodeRewards = A.map rewardFromState states
+
+    rewardFromState (GPUHHState_ (GPUBatteryState_ _ _ energy _ _) gen con _ _) =
+      -- Reward: energy stored + generation - consumption (encourage efficiency)
+      energy * 0.01 + gen * 0.1 - con * 0.1
+
+    -- Sum across nodes dimension to get per-env rewards
+    Z :. numEnvs :. numNodes = unlift (A.shape states) :: Z :. Exp Int :. Exp Int
+
+    -- Fold along the inner (node) dimension
+    envRewards = A.fold (+) 0 nodeRewards
+
+-- | Extract observations from states
+-- Flattens relevant state info into observation vector
+vecExtractObsKernel
+  :: Acc (Array DIM2 GPUHHState)    -- ^ States: [num_envs, num_nodes]
+  -> Exp Int                        -- ^ Observation dimension per node
+  -> Acc (Array DIM2 GR)            -- ^ Observations: [num_envs, obs_dim]
+vecExtractObsKernel states obsDimPerNode =
+  A.generate (A.index2 numEnvs totalObsDim) extractObs
+  where
+    Z :. numEnvs :. numNodes = unlift (A.shape states) :: Z :. Exp Int :. Exp Int
+    totalObsDim = numNodes * obsDimPerNode
+
+    -- Each node contributes obsDimPerNode features to the observation
+    -- Features: [battery_soc, battery_energy, generation, consumption, tx_in, tx_out]
+    extractObs ix =
+      let
+        Z :. envIdx :. obsIdx = unlift ix :: Z :. Exp Int :. Exp Int
+        nodeIdx = obsIdx `A.div` obsDimPerNode
+        featureIdx = obsIdx `A.mod` obsDimPerNode
+        state = states A.! A.index2 envIdx nodeIdx
+        GPUHHState_ (GPUBatteryState_ _ soc energy _ _) gen con txIn txOut = state
+      in
+        -- Select feature based on index
+        cond (featureIdx A.== 0) soc $
+        cond (featureIdx A.== 1) energy $
+        cond (featureIdx A.== 2) gen $
+        cond (featureIdx A.== 3) con $
+        cond (featureIdx A.== 4) txIn $
+        txOut
+
+-- | Check which environments are done (episode termination)
+-- Done conditions: battery depleted, max steps reached, etc.
+vecCheckDoneKernel
+  :: Acc (Array DIM2 GPUHHState)    -- ^ States: [num_envs, num_nodes]
+  -> Acc (Vector Int)               -- ^ Step counts: [num_envs]
+  -> Exp Int                        -- ^ Max episode length
+  -> ( Acc (Vector Int)             -- ^ Done flags: [num_envs]
+     , Acc (Vector Int)             -- ^ Truncated flags: [num_envs]
+     )
+vecCheckDoneKernel states stepCounts maxSteps = (dones, truncated)
+  where
+    Z :. numEnvs :. numNodes = unlift (A.shape states) :: Z :. Exp Int :. Exp Int
+
+    -- Check if any node in env has depleted battery (done condition)
+    -- Min battery SoC across nodes for each env
+    minSoC = A.fold1 A.min $ A.map extractSoC states
+    extractSoC (GPUHHState_ (GPUBatteryState_ _ soc _ _ _) _ _ _ _) = soc
+
+    -- Done if any battery SoC < 5%
+    dones = A.zipWith checkDone minSoC stepCounts
+    checkDone soc steps = cond (soc A.< 5.0) 1 0
+
+    -- Truncated if max steps reached (not a true termination)
+    truncated = A.map (\steps -> cond (steps A.>= maxSteps) 1 0) stepCounts
+
+-- | Apply actions to modify consumption/generation targets
+-- Actions are interpreted as battery control signals
+vecApplyActionsKernel
+  :: Acc (Array DIM2 GR)            -- ^ Actions: [num_envs, num_nodes] in [-1, 1]
+  -> Acc (Array DIM2 GR)            -- ^ Clipped/normalized actions
+vecApplyActionsKernel actions = A.map clipAction actions
+  where
+    clipAction a = A.max (-1) (A.min 1 a)

@@ -5,13 +5,39 @@
 {-# LANGUAGE BangPatterns #-}
 
 -- | High-level interface for parallel CUDA grid simulations
+--
 -- This module provides the main entry points for executing microgrid
--- simulations in parallel on CUDA-capable GPUs
+-- simulations in parallel on CUDA-capable GPUs. It supports both
+-- single-environment simulation and PufferLib-style vectorized environments
+-- for high-throughput RL training.
+--
+-- = Vectorized Environment (VecEnv)
+--
+-- The 'VecEnv' interface enables running thousands of independent grid
+-- simulations in parallel on GPU:
+--
+-- @
+-- env <- makeVecEnv 4096 gridSpec  -- 4096 parallel environments
+-- (obs, _) <- vecReset env
+-- loop $ do
+--   actions <- policy obs           -- Your RL policy
+--   (obs', rewards, dones, _, _) <- vecStep env actions
+--   ... training logic ...
+-- @
+--
 module CUDA.Simulation
-  ( -- * Simulation Execution
+  ( -- * Simulation Execution (Single Env)
     runCUDASimulation
   , runCUDASimulationN
   , runCUDASimulationStream
+    -- * Vectorized Environment (PufferLib-style)
+  , VecEnv(..)
+  , makeVecEnv
+  , makeVecEnvFromGrids
+  , vecStep
+  , vecReset
+  , vecClose
+  , vecGetObs
     -- * Grid Conversion
   , gridToGPU
   , gpuToGrid
@@ -424,3 +450,235 @@ runCUDASimulationStream config grid startTime callback = do
 withCUDABackend :: CUDABackend -> IO a -> IO a
 withCUDABackend PTXBackend action = action
 withCUDABackend NativeBackend action = action  -- Fallback is the same for now
+
+--------------------------------------------------------------------------------
+-- Vectorized Environment (PufferLib-style)
+--------------------------------------------------------------------------------
+
+-- | Vectorized environment for parallel RL training
+-- Runs num_envs independent grid simulations on GPU simultaneously
+data VecEnv = VecEnv
+  { veConfig      :: !VecEnvConfig           -- ^ Environment configuration
+  , veState       :: !(IORef VecEnvState)    -- ^ Mutable state reference
+  , veSpecs       :: !(Array DIM2 GPUHHSpec) -- ^ Grid specs [num_envs, num_nodes]
+  , veCUDAConfig  :: !CUDAConfig             -- ^ CUDA configuration
+  }
+
+-- | Create a vectorized environment with N copies of the same grid
+makeVecEnv
+  :: Int                    -- ^ Number of parallel environments
+  -> SampledGrid            -- ^ Grid template (replicated across all envs)
+  -> CUDAConfig             -- ^ CUDA configuration
+  -> IO VecEnv
+makeVecEnv numEnvs grid cudaConfig = do
+  -- Convert grid to GPU format
+  gpuGrid <- gridToGPU grid
+
+  let
+    -- Get specs and replicate across environments
+    singleEnvSpecs = ggsHouseholds gpuGrid
+    numNodes = P.length (A.toList singleEnvSpecs)
+
+    -- Replicate specs for all environments: [num_envs, num_nodes]
+    specsList = P.concat $ P.replicate numEnvs (A.toList singleEnvSpecs)
+    specs2D = A.fromList (Z :. numEnvs :. numNodes) specsList
+
+    -- Configuration
+    config = VecEnvConfig
+      { vecNumEnvs = numEnvs
+      , vecNumNodes = numNodes
+      , vecObsDim = 6  -- soc, energy, gen, con, txIn, txOut per node
+      , vecActionDim = 1  -- battery discharge rate per node
+      , vecMaxEpisodeLen = cudaMaxSteps cudaConfig
+      , vecAutoReset = True
+      , vecSharedTopology = True
+      }
+
+  -- Initialize state
+  initState <- initVecEnvState config specs2D cudaConfig
+  stateRef <- newIORef initState
+
+  return $ VecEnv
+    { veConfig = config
+    , veState = stateRef
+    , veSpecs = specs2D
+    , veCUDAConfig = cudaConfig
+    }
+
+-- | Create vectorized environment from multiple different grids
+makeVecEnvFromGrids
+  :: [SampledGrid]          -- ^ List of grids (one per environment)
+  -> CUDAConfig             -- ^ CUDA configuration
+  -> IO VecEnv
+makeVecEnvFromGrids grids cudaConfig = do
+  -- Convert all grids to GPU format
+  gpuGrids <- P.mapM gridToGPU grids
+
+  let
+    numEnvs = P.length grids
+    -- Assume all grids have same number of nodes (pad if needed in production)
+    numNodes = P.length $ A.toList $ ggsHouseholds $ P.head gpuGrids
+
+    -- Concatenate all specs: [num_envs, num_nodes]
+    allSpecs = P.concatMap (A.toList . ggsHouseholds) gpuGrids
+    specs2D = A.fromList (Z :. numEnvs :. numNodes) allSpecs
+
+    config = VecEnvConfig
+      { vecNumEnvs = numEnvs
+      , vecNumNodes = numNodes
+      , vecObsDim = 6
+      , vecActionDim = 1
+      , vecMaxEpisodeLen = cudaMaxSteps cudaConfig
+      , vecAutoReset = True
+      , vecSharedTopology = False
+      }
+
+  initState <- initVecEnvState config specs2D cudaConfig
+  stateRef <- newIORef initState
+
+  return $ VecEnv
+    { veConfig = config
+    , veState = stateRef
+    , veSpecs = specs2D
+    , veCUDAConfig = cudaConfig
+    }
+
+-- | Initialize vectorized environment state
+initVecEnvState
+  :: VecEnvConfig
+  -> Array DIM2 GPUHHSpec
+  -> CUDAConfig
+  -> IO VecEnvState
+initVecEnvState VecEnvConfig{..} specs cudaConfig = do
+  let
+    -- Initialize states on GPU
+    initStates = PTX.run $ vecInitStatesKernel (A.use specs)
+
+    -- Initialize time and step counters
+    times = A.fromList (Z :. vecNumEnvs) (P.replicate vecNumEnvs 0.0)
+    stepCounts = A.fromList (Z :. vecNumEnvs) (P.replicate vecNumEnvs (0 :: Int))
+    dones = A.fromList (Z :. vecNumEnvs) (P.replicate vecNumEnvs (0 :: Int))
+    truncated = A.fromList (Z :. vecNumEnvs) (P.replicate vecNumEnvs (0 :: Int))
+    cumRewards = A.fromList (Z :. vecNumEnvs) (P.replicate vecNumEnvs 0.0)
+
+    -- Initialize sim params (will be updated each step)
+    defaultParams = GPUSimParams
+      { gspDeltaT = cudaDeltaT cudaConfig
+      , gspAmbientTemp = 25.0
+      , gspWindSpeed = 2.0
+      , gspDayOfYear = 1
+      , gspHourOfDay = 12.0
+      }
+    simParams = A.fromList (Z :. vecNumEnvs) (P.replicate vecNumEnvs defaultParams)
+
+  return $ VecEnvState
+    { vesStates = initStates
+    , vesSpecs = specs
+    , vesTimes = times
+    , vesStepCounts = stepCounts
+    , vesDones = dones
+    , vesTruncated = truncated
+    , vesCumulativeReward = cumRewards
+    , vesSimParams = simParams
+    }
+
+-- | Step all environments with given actions
+-- This is the main RL interface - single batched call for all envs
+vecStep
+  :: VecEnv
+  -> Array DIM2 GR                    -- ^ Actions: [num_envs, num_nodes]
+  -> IO StepResult
+vecStep VecEnv{..} actions = do
+  currentState <- readIORef veState
+  let
+    VecEnvConfig{..} = veConfig
+
+    -- Clip actions
+    clippedActions = PTX.run $ vecApplyActionsKernel (A.use actions)
+
+    -- Step all environments
+    newStates = PTX.run $ vecGridStepKernel
+      (A.use veSpecs)
+      (A.use $ vesSimParams currentState)
+      (A.use $ vesStates currentState)
+      (A.use clippedActions)
+
+    -- Compute rewards
+    (envRewards, nodeRewards) = PTX.runN $ vecComputeRewardsKernel (A.use newStates)
+
+    -- Increment step counts
+    newStepCounts = PTX.run $ A.map (+1) (A.use $ vesStepCounts currentState)
+
+    -- Check done/truncated
+    (newDones, newTruncated) = PTX.runN $
+      vecCheckDoneKernel (A.use newStates) (A.use newStepCounts) (A.lift vecMaxEpisodeLen)
+
+    -- Auto-reset done environments
+    finalStates = if vecAutoReset
+      then PTX.run $ vecResetKernel (A.use veSpecs) (A.use newDones) (A.use newStates)
+      else newStates
+
+    -- Reset step counts for done envs
+    finalStepCounts = if vecAutoReset
+      then PTX.run $ A.zipWith (\d s -> cond (d A.== 1) 0 s)
+             (A.use newDones) (A.use newStepCounts)
+      else newStepCounts
+
+    -- Extract observations
+    obs = PTX.run $ vecExtractObsKernel (A.use finalStates) (A.lift vecObsDim)
+
+    -- Update times
+    newTimes = PTX.run $ A.zipWith (+) (A.use $ vesTimes currentState)
+                 (A.map gspDeltaT (A.use $ vesSimParams currentState))
+
+  -- Update state
+  let
+    updatedState = currentState
+      { vesStates = finalStates
+      , vesTimes = newTimes
+      , vesStepCounts = finalStepCounts
+      , vesDones = newDones
+      , vesTruncated = newTruncated
+      }
+
+  writeIORef veState updatedState
+
+  return $ StepResult
+    { srObs = obs
+    , srRewards = envRewards
+    , srDones = newDones
+    , srTruncated = newTruncated
+    , srNodeRewards = nodeRewards
+    }
+
+-- | Reset all environments and return initial observations
+vecReset
+  :: VecEnv
+  -> IO (Array DIM2 GR, VecEnvState)  -- ^ (observations, new state)
+vecReset VecEnv{..} = do
+  let VecEnvConfig{..} = veConfig
+
+  -- Re-initialize state
+  newState <- initVecEnvState veConfig veSpecs veCUDAConfig
+
+  -- Extract observations
+  let obs = PTX.run $ vecExtractObsKernel (A.use $ vesStates newState) (A.lift vecObsDim)
+
+  writeIORef veState newState
+
+  return (obs, newState)
+
+-- | Get current observations without stepping
+vecGetObs :: VecEnv -> IO (Array DIM2 GR)
+vecGetObs VecEnv{..} = do
+  currentState <- readIORef veState
+  let VecEnvConfig{..} = veConfig
+  return $ PTX.run $ vecExtractObsKernel (A.use $ vesStates currentState) (A.lift vecObsDim)
+
+-- | Close the environment (cleanup)
+vecClose :: VecEnv -> IO ()
+vecClose _ = return ()  -- No explicit cleanup needed for Accelerate
+
+-- | Helper to run two Acc computations and return both results
+runN :: (Arrays a, Arrays b) => (Acc a, Acc b) -> (a, b)
+runN (a, b) = (PTX.run a, PTX.run b)
