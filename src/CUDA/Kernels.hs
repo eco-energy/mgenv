@@ -654,6 +654,9 @@ messagePassingRound numNodes srcIdx dstIdx weights nodePower =
 -- | Vectorized message passing for multiple environments
 -- Edge topology is shared across envs, but node states differ
 -- NOTE: Properly models transmission losses (source loses more than dest gains)
+--
+-- Complexity: O(E + N) per environment, fully parallel across envs AND edges
+-- Uses scatter/gather pattern - no per-node iteration over edges
 vecMessagePassingKernel
   :: Exp Int                        -- ^ Number of nodes per env
   -> Acc (Vector Int)               -- ^ Edge sources: [num_edges] (shared topology)
@@ -662,55 +665,80 @@ vecMessagePassingKernel
   -> Acc (Array DIM2 GR)            -- ^ Node power: [num_envs, num_nodes]
   -> Acc (Array DIM2 GR)            -- ^ Updated node power: [num_envs, num_nodes]
 vecMessagePassingKernel numNodes srcIdx dstIdx efficiencies nodePowers =
-  A.generate (A.shape nodePowers) updateNode
+  A.zipWith (+) nodePowers netFlows
   where
     Z :. numEnvs :. _ = unlift (A.shape nodePowers) :: Z :. Exp Int :. Exp Int
     numEdges = A.length srcIdx
 
-    updateNode ix =
-      let
-        Z :. envIdx :. nodeIdx = unlift ix :: Z :. Exp Int :. Exp Int
-        currentPower = nodePowers A.! ix
+    -- Step 1: GATHER source and dest power for each edge × each env
+    -- Shape: [num_envs, num_edges]
+    srcPowers = A.generate (index2 numEnvs numEdges) $ \ix ->
+      let Z :. env :. e = unlift ix :: Z :. Exp Int :. Exp Int
+          srcNode = srcIdx A.! index1 e
+      in nodePowers A.! index2 env srcNode
 
-        -- Compute net flow for this specific node
-        -- Sum incoming - outgoing across all edges touching this node
-        netFlow = computeNetFlowForNode envIdx nodeIdx
-      in
-        currentPower + netFlow
+    dstPowers = A.generate (index2 numEnvs numEdges) $ \ix ->
+      let Z :. env :. e = unlift ix :: Z :. Exp Int :. Exp Int
+          dstNode = dstIdx A.! index1 e
+      in nodePowers A.! index2 env dstNode
 
-    -- Compute net power flow for a specific node in a specific environment
-    computeNetFlowForNode envIdx nodeIdx =
-      let
-        -- For each edge, compute contribution to this node
-        edgeContribs = A.generate (index1 numEdges) (edgeContribToNode envIdx nodeIdx)
-      in
-        the $ A.fold (+) 0 edgeContribs
+    -- Step 2: COMPUTE edge flows (fully parallel over envs × edges)
+    -- Shape: [num_envs, num_edges]
+    sentFlows = A.zipWith computeSent srcPowers dstPowers
+    computeSent pSrc pDst =
+      let surplus = pSrc - pDst
+      in cond (surplus A.> 0) (surplus * 0.5) 0
 
-    edgeContribToNode envIdx nodeIdx edgeIx =
-      let
-        Z :. e = unlift edgeIx :: Z :. Exp Int
-        src = srcIdx A.! edgeIx
-        dst = dstIdx A.! edgeIx
-        eta = efficiencies A.! edgeIx  -- transmission efficiency
+    -- Broadcast efficiency to [num_envs, num_edges]
+    receivedFlows = A.generate (index2 numEnvs numEdges) $ \ix ->
+      let Z :. env :. e = unlift ix :: Z :. Exp Int :. Exp Int
+          eta = efficiencies A.! index1 e
+          sent = sentFlows A.! ix
+      in eta * sent
 
-        srcPower = nodePowers A.! index2 envIdx src
-        dstPower = nodePowers A.! index2 envIdx dst
+    -- Step 3: SCATTER-ADD to aggregate at nodes
+    -- For each env, scatter to [num_nodes], stack into [num_envs, num_nodes]
+    --
+    -- We flatten to 1D for permute, using (env * numNodes + node) indexing
+    -- Then reshape back to 2D
 
-        surplus = srcPower - dstPower
+    totalNodes = numEnvs * numNodes
 
-        -- Power SENT by source (full amount)
-        powerSent = cond (surplus A.> 0) (surplus * 0.5) 0
+    -- Flatten sent/received flows to [num_envs * num_edges]
+    sentFlat = A.flatten sentFlows
+    receivedFlat = A.flatten receivedFlows
 
-        -- Power RECEIVED by destination (reduced by efficiency)
-        powerReceived = eta * powerSent
+    -- Create destination indices for scatter: [num_envs * num_edges]
+    -- For edge e in env i: dst index = i * numNodes + dstIdx[e]
+    scatterDstIdx = A.generate (index1 (numEnvs * numEdges)) $ \ix ->
+      let Z :. flatIdx = unlift ix :: Z :. Exp Int
+          env = flatIdx `A.div` numEdges
+          e = flatIdx `A.mod` numEdges
+          dstNode = dstIdx A.! index1 e
+      in env * numNodes + dstNode
 
-        -- This node:
-        --   - If dst: GAINS powerReceived (positive)
-        --   - If src: LOSES powerSent (negative) - note: loses MORE than dst gains
-        contrib = cond (nodeIdx A.== dst) powerReceived $
-                  cond (nodeIdx A.== src) (-powerSent) 0
-      in
-        contrib
+    scatterSrcIdx = A.generate (index1 (numEnvs * numEdges)) $ \ix ->
+      let Z :. flatIdx = unlift ix :: Z :. Exp Int
+          env = flatIdx `A.div` numEdges
+          e = flatIdx `A.mod` numEdges
+          srcNode = srcIdx A.! index1 e
+      in env * numNodes + srcNode
+
+    -- Scatter-add: O(E) atomic adds, fully parallel
+    incomingFlat = permute (+) (fill (index1 totalNodes) 0)
+                     (\ix -> Just_ (index1 (scatterDstIdx A.! ix)))
+                     receivedFlat
+
+    outgoingFlat = permute (+) (fill (index1 totalNodes) 0)
+                     (\ix -> Just_ (index1 (scatterSrcIdx A.! ix)))
+                     sentFlat
+
+    -- Reshape back to [num_envs, num_nodes]
+    incoming = A.reshape (index2 numEnvs numNodes) incomingFlat
+    outgoing = A.reshape (index2 numEnvs numNodes) outgoingFlat
+
+    -- Net flow = received - sent
+    netFlows = A.zipWith (-) incoming outgoing
 
 -- | Apply message passing to update household states with power exchange
 vecApplyPowerExchange
