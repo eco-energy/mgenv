@@ -43,7 +43,7 @@ module CUDA.Kernels
     -- * Graph Message Passing Kernels
   , gatherNodeFeatures
   , scatterAddMessages
-  , computePowerFlowMessages
+  , computePowerFlowWithLosses
   , messagePassingRound
   , vecMessagePassingKernel
   , vecApplyPowerExchange
@@ -596,54 +596,72 @@ scatterAddMessages numNodes dstIndices edgeMessages =
     defaults = fill (index1 numNodes) 0
     indexMap ix = Just_ (index1 (dstIndices A.! ix))
 
--- | Compute power flow messages along edges
--- Message = transmission efficiency * (src_surplus - dst_deficit)
-computePowerFlowMessages
+-- | Compute power sent FROM source (before transmission losses)
+-- Returns (sent_power, received_power) per edge
+computePowerFlowWithLosses
   :: Acc (Vector Int)               -- ^ Source indices: [num_edges]
   -> Acc (Vector Int)               -- ^ Destination indices: [num_edges]
-  -> Acc (Vector GR)                -- ^ Edge weights (transmission efficiency): [num_edges]
+  -> Acc (Vector GR)                -- ^ Edge weights (transmission efficiency η): [num_edges]
   -> Acc (Vector GR)                -- ^ Node surplus/deficit: [num_nodes]
-  -> Acc (Vector GR)                -- ^ Power flow per edge: [num_edges]
-computePowerFlowMessages srcIdx dstIdx weights nodePower =
-  A.zipWith3 computeFlow weights srcPower dstPower
+  -> ( Acc (Vector GR)              -- ^ Power SENT by source: [num_edges]
+     , Acc (Vector GR)              -- ^ Power RECEIVED by dest: [num_edges]
+     , Acc (Vector GR)              -- ^ Power LOST in transmission: [num_edges]
+     )
+computePowerFlowWithLosses srcIdx dstIdx efficiencies nodePower =
+  (sentPower, receivedPower, lostPower)
   where
     srcPower = gather srcIdx nodePower
     dstPower = gather dstIdx nodePower
-    -- Power flows from surplus to deficit
-    computeFlow w pSrc pDst =
+
+    -- Power sent = half the surplus (bidirectional balancing)
+    sentPower = A.zipWith computeSent srcPower dstPower
+    computeSent pSrc pDst =
       let surplus = pSrc - pDst
-      in cond (surplus A.> 0) (w * surplus * 0.5) 0
+      in cond (surplus A.> 0) (surplus * 0.5) 0
+
+    -- Power received = sent * efficiency
+    receivedPower = A.zipWith (*) efficiencies sentPower
+
+    -- Power lost = sent - received = sent * (1 - efficiency)
+    lostPower = A.zipWith (-) sentPower receivedPower
 
 -- | Single message passing round for grid power balancing
 -- Returns updated power at each node after exchange
+-- NOTE: Total system energy decreases by transmission losses
 messagePassingRound
   :: Exp Int                        -- ^ Number of nodes
   -> Acc (Vector Int)               -- ^ Edge sources: [num_edges]
   -> Acc (Vector Int)               -- ^ Edge destinations: [num_edges]
-  -> Acc (Vector GR)                -- ^ Edge weights: [num_edges]
+  -> Acc (Vector GR)                -- ^ Edge weights (transmission efficiency): [num_edges]
   -> Acc (Vector GR)                -- ^ Current node power: [num_nodes]
   -> Acc (Vector GR)                -- ^ Updated node power: [num_nodes]
 messagePassingRound numNodes srcIdx dstIdx weights nodePower =
   A.zipWith (+) nodePower netFlow
   where
-    -- Compute flow on each edge
-    edgeFlows = computePowerFlowMessages srcIdx dstIdx weights nodePower
-    -- Incoming power (positive)
-    incoming = scatterAddMessages numNodes dstIdx edgeFlows
-    -- Outgoing power (negative)
-    outgoing = scatterAddMessages numNodes srcIdx edgeFlows
+    -- Compute flow with proper losses
+    (sentFlows, receivedFlows, _lostFlows) =
+      computePowerFlowWithLosses srcIdx dstIdx weights nodePower
+
+    -- Incoming power (what destination actually receives)
+    incoming = scatterAddMessages numNodes dstIdx receivedFlows
+
+    -- Outgoing power (what source actually sends - the full amount)
+    outgoing = scatterAddMessages numNodes srcIdx sentFlows
+
+    -- Net = received - sent (sources lose more than destinations gain)
     netFlow = A.zipWith (-) incoming outgoing
 
 -- | Vectorized message passing for multiple environments
 -- Edge topology is shared across envs, but node states differ
+-- NOTE: Properly models transmission losses (source loses more than dest gains)
 vecMessagePassingKernel
   :: Exp Int                        -- ^ Number of nodes per env
   -> Acc (Vector Int)               -- ^ Edge sources: [num_edges] (shared topology)
   -> Acc (Vector Int)               -- ^ Edge destinations: [num_edges]
-  -> Acc (Vector GR)                -- ^ Edge weights: [num_edges]
+  -> Acc (Vector GR)                -- ^ Edge weights (transmission efficiency): [num_edges]
   -> Acc (Array DIM2 GR)            -- ^ Node power: [num_envs, num_nodes]
   -> Acc (Array DIM2 GR)            -- ^ Updated node power: [num_envs, num_nodes]
-vecMessagePassingKernel numNodes srcIdx dstIdx weights nodePowers =
+vecMessagePassingKernel numNodes srcIdx dstIdx efficiencies nodePowers =
   A.generate (A.shape nodePowers) updateNode
   where
     Z :. numEnvs :. _ = unlift (A.shape nodePowers) :: Z :. Exp Int :. Exp Int
@@ -673,17 +691,24 @@ vecMessagePassingKernel numNodes srcIdx dstIdx weights nodePowers =
         Z :. e = unlift edgeIx :: Z :. Exp Int
         src = srcIdx A.! edgeIx
         dst = dstIdx A.! edgeIx
-        w = weights A.! edgeIx
+        eta = efficiencies A.! edgeIx  -- transmission efficiency
 
         srcPower = nodePowers A.! index2 envIdx src
         dstPower = nodePowers A.! index2 envIdx dst
 
         surplus = srcPower - dstPower
-        flow = cond (surplus A.> 0) (w * surplus * 0.5) 0
 
-        -- This node receives flow if it's dst, sends if it's src
-        contrib = cond (nodeIdx A.== dst) flow $
-                  cond (nodeIdx A.== src) (-flow) 0
+        -- Power SENT by source (full amount)
+        powerSent = cond (surplus A.> 0) (surplus * 0.5) 0
+
+        -- Power RECEIVED by destination (reduced by efficiency)
+        powerReceived = eta * powerSent
+
+        -- This node:
+        --   - If dst: GAINS powerReceived (positive)
+        --   - If src: LOSES powerSent (negative) - note: loses MORE than dst gains
+        contrib = cond (nodeIdx A.== dst) powerReceived $
+                  cond (nodeIdx A.== src) (-powerSent) 0
       in
         contrib
 
