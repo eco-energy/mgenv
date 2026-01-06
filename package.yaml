@@ -71,6 +71,12 @@ dependencies:
 - ghc-prim
 - sbv
 - time-compat
+# CUDA/GPU acceleration via Accelerate
+- accelerate
+- accelerate-llvm-ptx
+- accelerate-io
+- vector
+- async
 ghc-options:
 - -Wall
 - -Wcompat

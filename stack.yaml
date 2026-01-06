@@ -35,6 +35,19 @@ packages:
 # forks / in-progress versions pinned to a git hash. For example:
 #
 extra-deps:
+  # CUDA/GPU acceleration via Accelerate
+  - accelerate-1.3.0.0
+  - accelerate-llvm-1.3.0.0
+  - accelerate-llvm-native-1.3.0.3
+  - accelerate-llvm-ptx-1.3.0.3
+  - accelerate-io-1.0.0.1
+  - accelerate-io-vector-0.1.0.0
+  - llvm-hs-pure-9.0.0
+  - llvm-hs-9.0.1
+  - cuda-0.10.2.0
+  - nvvm-0.9.0.2
+  - language-c-quote-0.13
+  - mainland-pretty-0.7.1
   - git: https://github.com/conal/concat.git
     commit: 6da06f44947ea8909fa3d60e94a238f7bc998bb6
     subdirs:
